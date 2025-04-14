@@ -563,12 +563,12 @@ with st.sidebar:
         idv_ly_file = st.file_uploader("File IDV Anno Precedente (LY)", type=["xlsx", "xls"])
         grp_otb_file = st.file_uploader("File Gruppi Confermati (opzionale)", type=["xlsx", "xls"])
         grp_opz_file = st.file_uploader("File Gruppi Opzionati (opzionale)", type=["xlsx", "xls"])
-        
-        with st.expander("Mappatura campi (avanzato)", expanded=False):
-            st.warning("Da configurare in base ai nomi delle colonne nei tuoi file Excel")
-            date_column_name = st.text_input("Nome colonna data", "Data")
-            rn_column_name = st.text_input("Nome colonna room nights", "RN")
-            adr_column_name = st.text_input("Nome colonna ADR", "ADR")
+    
+    with st.expander("Mappatura campi (avanzato)", expanded=False):
+        st.warning("Da configurare in base ai nomi delle colonne nei tuoi file Excel")
+        date_column_name = st.text_input("Nome colonna data", "Data")
+        rn_column_name = st.text_input("Nome colonna room nights", "RN")
+        adr_column_name = st.text_input("Nome colonna ADR", "ADR")
 
 st.header("1️⃣ Periodo di Analisi")
 
