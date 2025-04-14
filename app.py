@@ -617,7 +617,7 @@ if idv_cy_file is not None and idv_ly_file is not None:
                    }
                )
            
-           with tab2:
+            with tab2:
                st.dataframe(
                    processed_data[['data', 'giorno', 'otb_ind_adr', 'ly_ind_adr', 'fcst_ind_adr', 'grp_otb_adr', 'grp_opz_adr', 'finale_adr']],
                    column_config={
@@ -632,7 +632,7 @@ if idv_cy_file is not None and idv_ly_file is not None:
                    }
                )
            
-           with tab3:
+            with tab3:
                st.dataframe(
                    processed_data[['data', 'giorno', 'otb_ind_rev', 'ly_ind_rev', 'fcst_ind_rev', 'grp_otb_rev', 'grp_opz_rev', 'finale_rev']],
                    column_config={
