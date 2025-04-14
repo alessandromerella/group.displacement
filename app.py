@@ -647,10 +647,10 @@ if idv_cy_file is not None and idv_ly_file is not None:
                    }
                )
            
-           analyzed_data = processed_data
-       else:
-           st.error("Errore nell'elaborazione dei file")
-           analyzed_data = None
+            analyzed_data = processed_data
+        else:
+            st.error("Errore nell'elaborazione dei file")
+            analyzed_data = None
 else:
    st.warning("Carica i file IDV per iniziare l'analisi")
    analyzed_data = None
