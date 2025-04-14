@@ -25,7 +25,6 @@ def authenticate():
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.image("", width=200)
         st.markdown("<h2 style='text-align: center;'>Group Displacement Analyzer</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center;'>Accedi per continuare</p>", unsafe_allow_html=True)
     
@@ -844,7 +843,7 @@ st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Group Displacement Analyzer | v0.4 by Alessandro Merella; credits to Andrea Conte for the original idea<br>
+       <p>Group Displacement Analyzer | v0.4.3 by Alessandro Merella; credits to Andrea Conte for the original idea<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}
        </p>
    </div>
