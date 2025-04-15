@@ -1024,10 +1024,12 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
                
                st.text_area("Email da inviare", email_text, height=300)
                
+               email_text_escaped = email_text.replace("\n", "\\n").replace("'", "\\'").replace('"', '\\"')
+               
                st.markdown(
                    f"""
                    <button onclick="
-                       navigator.clipboard.writeText(`{email_text}`);
+                       navigator.clipboard.writeText('{email_text_escaped}');
                        alert('Email copiata negli appunti');
                    " style="
                        background-color: {COLOR_PALETTE['secondary']};
@@ -1048,7 +1050,7 @@ st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Hotel Group Displacement Analyzer | v0.4.5 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
+       <p>Hotel Group Displacement Analyzer | v0.4.6 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}
        </p>
    </div>
