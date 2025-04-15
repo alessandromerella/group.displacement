@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -555,20 +555,23 @@ with st.sidebar:
     hotel_capacity = st.number_input("Capacità hotel (camere)", min_value=1, value=66)
     iva_rate = st.number_input("Aliquota IVA (%)", min_value=0.0, max_value=30.0, value=10.0) / 100
     
-    st.header("Carica dati")
-    with st.expander("Configurazione file", expanded=True):
-        st.info("Carica i file Excel esportati da Power BI per il periodo desiderato")
-        
-        idv_cy_file = st.file_uploader("File IDV Anno Corrente (OTB)", type=["xlsx", "xls"])
-        idv_ly_file = st.file_uploader("File IDV Anno Precedente (LY)", type=["xlsx", "xls"])
-        grp_otb_file = st.file_uploader("File Gruppi Confermati (opzionale)", type=["xlsx", "xls"])
-        grp_opz_file = st.file_uploader("File Gruppi Opzionati (opzionale)", type=["xlsx", "xls"])
+    st.header("Fonte dati")
+    data_source = st.radio("Seleziona fonte dati", ["Import file Excel", "Inserimento manuale"])
     
-    with st.expander("Mappatura campi (avanzato)", expanded=False):
-        st.warning("Da configurare in base ai nomi delle colonne nei tuoi file Excel")
-        date_column_name = st.text_input("Nome colonna data", "Data")
-        rn_column_name = st.text_input("Nome colonna room nights", "RN")
-        adr_column_name = st.text_input("Nome colonna ADR", "ADR")
+    if data_source == "Import file Excel":
+        with st.expander("Configurazione file", expanded=True):
+            st.info("Carica i file Excel esportati da Power BI per il periodo desiderato")
+            
+            idv_cy_file = st.file_uploader("File IDV Anno Corrente (OTB)", type=["xlsx", "xls"])
+            idv_ly_file = st.file_uploader("File IDV Anno Precedente (LY)", type=["xlsx", "xls"])
+            grp_otb_file = st.file_uploader("File Gruppi Confermati (opzionale)", type=["xlsx", "xls"])
+            grp_opz_file = st.file_uploader("File Gruppi Opzionati (opzionale)", type=["xlsx", "xls"])
+        
+        with st.expander("Mappatura campi (avanzato)", expanded=False):
+            st.warning("Da configurare in base ai nomi delle colonne nei tuoi file Excel")
+            date_column_name = st.text_input("Nome colonna data", "Data")
+            rn_column_name = st.text_input("Nome colonna room nights", "RN")
+            adr_column_name = st.text_input("Nome colonna ADR", "ADR")
 
 st.header("1️⃣ Periodo di Analisi")
 
@@ -582,77 +585,279 @@ st.header("2️⃣ Dati On The Books e Forecast")
 
 date_range = pd.date_range(start=start_date, end=end_date - timedelta(days=1))
 
-if idv_cy_file is not None and idv_ly_file is not None:
-    with st.spinner("Elaborazione file in corso..."):
-        processed_data = process_uploaded_files(
-            idv_cy_file,
-            idv_ly_file,
-            grp_otb_file,
-            grp_opz_file,
-            date_range,
-            date_column_name,
-            rn_column_name,
-            adr_column_name
-        )
-        
-        if processed_data is not None:
-            st.success("File elaborati con successo")
+analyzed_data = None
+
+if data_source == "Import file Excel":
+    if idv_cy_file is not None and idv_ly_file is not None:
+        with st.spinner("Elaborazione file in corso..."):
+            processed_data = process_uploaded_files(
+                idv_cy_file,
+                idv_ly_file,
+                grp_otb_file,
+                grp_opz_file,
+                date_range,
+                date_column_name,
+                rn_column_name,
+                adr_column_name
+            )
             
-            st.subheader("Dati elaborati")
-            tab1, tab2, tab3 = st.tabs(["Room Nights", "ADR", "Revenue"])
-            
-            with tab1:
-                st.dataframe(
-                    processed_data[['data', 'giorno', 'otb_ind_rn', 'ly_ind_rn', 'fcst_ind_rn', 'grp_otb_rn', 'grp_opz_rn', 'finale_rn']],
-                    column_config={
-                        "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
-                        "giorno": "Giorno",
-                        "otb_ind_rn": st.column_config.NumberColumn("OTB IND", format="%d"),
-                        "ly_ind_rn": st.column_config.NumberColumn("LY IND", format="%d"),
-                        "fcst_ind_rn": st.column_config.NumberColumn("FCST IND", format="%d"),
-                        "grp_otb_rn": st.column_config.NumberColumn("GRP OTB", format="%d"),
-                        "grp_opz_rn": st.column_config.NumberColumn("GRP OPZ", format="%d"),
-                       "finale_rn": st.column_config.NumberColumn("TOTALE", format="%d")
-                   }
-               )
-           
-            with tab2:
-               st.dataframe(
-                   processed_data[['data', 'giorno', 'otb_ind_adr', 'ly_ind_adr', 'fcst_ind_adr', 'grp_otb_adr', 'grp_opz_adr', 'finale_adr']],
-                   column_config={
-                       "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
-                       "giorno": "Giorno",
-                       "otb_ind_adr": st.column_config.NumberColumn("OTB IND", format="€%.2f"),
-                       "ly_ind_adr": st.column_config.NumberColumn("LY IND", format="€%.2f"),
-                       "fcst_ind_adr": st.column_config.NumberColumn("FCST IND", format="€%.2f"),
-                       "grp_otb_adr": st.column_config.NumberColumn("GRP OTB", format="€%.2f"),
-                       "grp_opz_adr": st.column_config.NumberColumn("GRP OPZ", format="€%.2f"),
-                       "finale_adr": st.column_config.NumberColumn("FINALE", format="€%.2f")
-                   }
-               )
-           
-            with tab3:
-               st.dataframe(
-                   processed_data[['data', 'giorno', 'otb_ind_rev', 'ly_ind_rev', 'fcst_ind_rev', 'grp_otb_rev', 'grp_opz_rev', 'finale_rev']],
-                   column_config={
-                       "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
-                       "giorno": "Giorno",
-                       "otb_ind_rev": st.column_config.NumberColumn("OTB IND", format="€%.2f"),
-                       "ly_ind_rev": st.column_config.NumberColumn("LY IND", format="€%.2f"),
-                       "fcst_ind_rev": st.column_config.NumberColumn("FCST IND", format="€%.2f"),
-                       "grp_otb_rev": st.column_config.NumberColumn("GRP OTB", format="€%.2f"),
-                       "grp_opz_rev": st.column_config.NumberColumn("GRP OPZ", format="€%.2f"),
-                       "finale_rev": st.column_config.NumberColumn("FINALE", format="€%.2f")
-                   }
-               )
-           
-            analyzed_data = processed_data
-        else:
-            st.error("Errore nell'elaborazione dei file")
-            analyzed_data = None
-else:
-   st.warning("Carica i file IDV per iniziare l'analisi")
-   analyzed_data = None
+            if processed_data is not None:
+                st.success("File elaborati con successo")
+                
+                st.subheader("Dati elaborati")
+                tab1, tab2, tab3 = st.tabs(["Room Nights", "ADR", "Revenue"])
+                
+                with tab1:
+                    st.dataframe(
+                        processed_data[['data', 'giorno', 'otb_ind_rn', 'ly_ind_rn', 'fcst_ind_rn', 'grp_otb_rn', 'grp_opz_rn', 'finale_rn']],
+                        column_config={
+                            "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+                            "giorno": "Giorno",
+                            "otb_ind_rn": st.column_config.NumberColumn("OTB IND", format="%d"),
+                            "ly_ind_rn": st.column_config.NumberColumn("LY IND", format="%d"),
+                            "fcst_ind_rn": st.column_config.NumberColumn("FCST IND", format="%d"),
+                            "grp_otb_rn": st.column_config.NumberColumn("GRP OTB", format="%d"),
+                            "grp_opz_rn": st.column_config.NumberColumn("GRP OPZ", format="%d"),
+                            "finale_rn": st.column_config.NumberColumn("TOTALE", format="%d")
+                        }
+                    )
+               
+                with tab2:
+                    st.dataframe(
+                        processed_data[['data', 'giorno', 'otb_ind_adr', 'ly_ind_adr', 'fcst_ind_adr', 'grp_otb_adr', 'grp_opz_adr', 'finale_adr']],
+                        column_config={
+                            "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+                            "giorno": "Giorno",
+                            "otb_ind_adr": st.column_config.NumberColumn("OTB IND", format="€%.2f"),
+                            "ly_ind_adr": st.column_config.NumberColumn("LY IND", format="€%.2f"),
+                            "fcst_ind_adr": st.column_config.NumberColumn("FCST IND", format="€%.2f"),
+                            "grp_otb_adr": st.column_config.NumberColumn("GRP OTB", format="€%.2f"),
+                            "grp_opz_adr": st.column_config.NumberColumn("GRP OPZ", format="€%.2f"),
+                            "finale_adr": st.column_config.NumberColumn("FINALE", format="€%.2f")
+                        }
+                    )
+               
+                with tab3:
+                    st.dataframe(
+                        processed_data[['data', 'giorno', 'otb_ind_rev', 'ly_ind_rev', 'fcst_ind_rev', 'grp_otb_rev', 'grp_opz_rev', 'finale_rev']],
+                        column_config={
+                            "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+                            "giorno": "Giorno",
+                            "otb_ind_rev": st.column_config.NumberColumn("OTB IND", format="€%.2f"),
+                            "ly_ind_rev": st.column_config.NumberColumn("LY IND", format="€%.2f"),
+                            "fcst_ind_rev": st.column_config.NumberColumn("FCST IND", format="€%.2f"),
+                            "grp_otb_rev": st.column_config.NumberColumn("GRP OTB", format="€%.2f"),
+                            "grp_opz_rev": st.column_config.NumberColumn("GRP OPZ", format="€%.2f"),
+                            "finale_rev": st.column_config.NumberColumn("FINALE", format="€%.2f")
+                        }
+                    )
+               
+                analyzed_data = processed_data
+            else:
+                st.error("Errore nell'elaborazione dei file")
+                analyzed_data = None
+    else:
+        st.warning("Carica i file IDV per iniziare l'analisi")
+        analyzed_data = None
+       
+elif data_source == "Inserimento manuale":
+   st.info("Inserisci manualmente i dati per il periodo selezionato")
+   
+   # Prepara struttura base dei dati
+   base_data = {
+       'data': date_range,
+       'giorno': [d.strftime('%a') for d in date_range],
+       'data_ly': [same_day_last_year(d) for d in date_range],
+       'giorno_ly': [same_day_last_year(d).strftime('%a') for d in date_range],
+       'otb_ind_rn': [0] * len(date_range),
+       'ly_ind_rn': [0] * len(date_range),
+       'grp_otb_rn': [0] * len(date_range),
+       'grp_opz_rn': [0] * len(date_range),
+       'otb_ind_adr': [0.0] * len(date_range),
+       'ly_ind_adr': [0.0] * len(date_range),
+       'grp_otb_adr': [0.0] * len(date_range),
+       'grp_opz_adr': [0.0] * len(date_range)
+   }
+
+   df_base = pd.DataFrame(base_data)
+   
+   # Room Nights
+   st.subheader("Inserimento Room Nights")
+   col1, col2 = st.columns(2)
+   
+   with col1:
+       st.markdown("**Room Nights - Anno Corrente**")
+       edited_rn_cy = st.data_editor(
+           df_base[['data', 'giorno', 'otb_ind_rn', 'grp_otb_rn', 'grp_opz_rn']],
+           hide_index=True,
+           key="rn_cy",
+           column_config={
+               "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+               "giorno": "Giorno",
+               "otb_ind_rn": st.column_config.NumberColumn("OTB IND", min_value=0, format="%d"),
+               "grp_otb_rn": st.column_config.NumberColumn("GRP OTB", min_value=0, format="%d"),
+               "grp_opz_rn": st.column_config.NumberColumn("GRP OPZ", min_value=0, format="%d")
+           }
+       )
+   
+   with col2:
+       st.markdown("**Room Nights - Anno Precedente**")
+       edited_rn_ly = st.data_editor(
+           df_base[['data_ly', 'giorno_ly', 'ly_ind_rn']],
+           hide_index=True,
+           key="rn_ly",
+           column_config={
+               "data_ly": st.column_config.DateColumn("Data LY", format="DD/MM/YYYY"),
+               "giorno_ly": "Giorno LY",
+               "ly_ind_rn": st.column_config.NumberColumn("LY IND", min_value=0, format="%d")
+           }
+       )
+   
+   # ADR
+   st.subheader("Inserimento ADR")
+   col1, col2 = st.columns(2)
+   
+   with col1:
+       st.markdown("**ADR - Anno Corrente**")
+       edited_adr_cy = st.data_editor(
+           df_base[['data', 'giorno', 'otb_ind_adr', 'grp_otb_adr', 'grp_opz_adr']],
+           hide_index=True,
+           key="adr_cy",
+           column_config={
+               "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+               "giorno": "Giorno",
+               "otb_ind_adr": st.column_config.NumberColumn("OTB IND", min_value=0, format="€%.2f"),
+               "grp_otb_adr": st.column_config.NumberColumn("GRP OTB", min_value=0, format="€%.2f"),
+               "grp_opz_adr": st.column_config.NumberColumn("GRP OPZ", min_value=0, format="€%.2f")
+           }
+       )
+   
+   with col2:
+       st.markdown("**ADR - Anno Precedente**")
+       edited_adr_ly = st.data_editor(
+           df_base[['data_ly', 'giorno_ly', 'ly_ind_adr']],
+           hide_index=True,
+           key="adr_ly",
+           column_config={
+               "data_ly": st.column_config.DateColumn("Data LY", format="DD/MM/YYYY"),
+               "giorno_ly": "Giorno LY",
+               "ly_ind_adr": st.column_config.NumberColumn("LY IND", min_value=0, format="€%.2f")
+           }
+       )
+   
+   # Calcolo automatico del forecast
+   st.subheader("Parametri Forecast")
+   col1, col2 = st.columns(2)
+   
+   with col1:
+       forecast_method = st.selectbox("Metodo di Forecast", 
+                                     ["Basato su LY", "Percentuale su OTB", "Valore assoluto"])
+   
+   with col2:
+       if forecast_method == "Basato su LY":
+           pickup_factor = st.slider("Moltiplicatore LY", 0.5, 2.0, 1.1, 0.1, 
+                                   help="Moltiplica i dati LY per questo fattore")
+       elif forecast_method == "Percentuale su OTB":
+           pickup_percentage = st.slider("Pickup %", 0, 100, 20, 5, 
+                                       help="Aggiunge questa percentuale all'OTB attuale")
+       else:
+           pickup_value = st.number_input("Camere da aggiungere", 0, 100, 10,
+                                        help="Aggiunge questo numero di camere all'OTB attuale")
+   
+   # Combinare i dati e calcolare il forecast
+   try:
+       # Combina i dati di room nights
+       final_data = edited_rn_cy.copy()
+       final_data = pd.merge(final_data, edited_rn_ly[['data_ly', 'ly_ind_rn']], 
+                           left_index=True, right_index=True)
+       
+       # Combina i dati di ADR
+       final_data = pd.merge(final_data, edited_adr_cy[['otb_ind_adr', 'grp_otb_adr', 'grp_opz_adr']], 
+                           left_index=True, right_index=True)
+       final_data = pd.merge(final_data, edited_adr_ly[['ly_ind_adr']], 
+                           left_index=True, right_index=True)
+       
+       # Calcola il forecast basato sul metodo selezionato
+       if forecast_method == "Basato su LY":
+           final_data['fcst_ind_rn'] = np.ceil(final_data['ly_ind_rn'] * pickup_factor)
+       elif forecast_method == "Percentuale su OTB":
+           final_data['fcst_ind_rn'] = np.ceil(final_data['otb_ind_rn'] * (1 + pickup_percentage/100))
+       else:
+           final_data['fcst_ind_rn'] = final_data['otb_ind_rn'] + pickup_value
+       
+       # Calcola ADR del forecast (media ponderata tra OTB e nuovo business)
+       final_data['fcst_ind_adr'] = final_data['otb_ind_adr']  # Semplificato per ora
+       
+       # Calcola totali
+       final_data['finale_rn'] = final_data['fcst_ind_rn'] + final_data['grp_otb_rn']
+       final_data['finale_opz_rn'] = final_data['fcst_ind_rn'] + final_data['grp_otb_rn'] + final_data['grp_opz_rn']
+       
+       # Calcola revenue
+       final_data['otb_ind_rev'] = final_data['otb_ind_rn'] * final_data['otb_ind_adr']
+       final_data['ly_ind_rev'] = final_data['ly_ind_rn'] * final_data['ly_ind_adr']
+       final_data['grp_otb_rev'] = final_data['grp_otb_rn'] * final_data['grp_otb_adr']
+       final_data['grp_opz_rev'] = final_data['grp_opz_rn'] * final_data['grp_opz_adr']
+       final_data['fcst_ind_rev'] = final_data['fcst_ind_rn'] * final_data['fcst_ind_adr']
+       
+       final_data['finale_rev'] = final_data['fcst_ind_rev'] + final_data['grp_otb_rev']
+       final_data['finale_adr'] = np.where(final_data['finale_rn'] > 0,
+                                        final_data['finale_rev'] / final_data['finale_rn'],
+                                        0)
+       
+       # Mostra il forecast calcolato
+       st.subheader("Forecast Calcolato")
+       tab1, tab2, tab3 = st.tabs(["Room Nights", "ADR", "Revenue"])
+       
+       with tab1:
+           st.dataframe(
+               final_data[['data', 'giorno', 'otb_ind_rn', 'ly_ind_rn', 'fcst_ind_rn', 'grp_otb_rn', 'grp_opz_rn', 'finale_rn']],
+               column_config={
+                   "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+                   "giorno": "Giorno",
+                   "otb_ind_rn": st.column_config.NumberColumn("OTB IND", format="%d"),
+                   "ly_ind_rn": st.column_config.NumberColumn("LY IND", format="%d"),
+                   "fcst_ind_rn": st.column_config.NumberColumn("FCST IND", format="%d"),
+                   "grp_otb_rn": st.column_config.NumberColumn("GRP OTB", format="%d"),
+                   "grp_opz_rn": st.column_config.NumberColumn("GRP OPZ", format="%d"),
+                   "finale_rn": st.column_config.NumberColumn("TOTALE", format="%d")
+               }
+           )
+       
+       with tab2:
+           st.dataframe(
+               final_data[['data', 'giorno', 'otb_ind_adr', 'ly_ind_adr', 'fcst_ind_adr', 'grp_otb_adr', 'grp_opz_adr', 'finale_adr']],
+               column_config={
+                   "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+                   "giorno": "Giorno",
+                   "otb_ind_adr": st.column_config.NumberColumn("OTB IND", format="€%.2f"),
+                   "ly_ind_adr": st.column_config.NumberColumn("LY IND", format="€%.2f"),
+                   "fcst_ind_adr": st.column_config.NumberColumn("FCST IND", format="€%.2f"),
+                   "grp_otb_adr": st.column_config.NumberColumn("GRP OTB", format="€%.2f"),
+                   "grp_opz_adr": st.column_config.NumberColumn("GRP OPZ", format="€%.2f"),
+                   "finale_adr": st.column_config.NumberColumn("FINALE", format="€%.2f")
+               }
+           )
+       
+       with tab3:
+           st.dataframe(
+               final_data[['data', 'giorno', 'otb_ind_rev', 'ly_ind_rev', 'fcst_ind_rev', 'grp_otb_rev', 'grp_opz_rev', 'finale_rev']],
+               column_config={
+                   "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+                   "giorno": "Giorno",
+                   "otb_ind_rev": st.column_config.NumberColumn("OTB IND", format="€%.2f"),
+                   "ly_ind_rev": st.column_config.NumberColumn("LY IND", format="€%.2f"),
+                   "fcst_ind_rev": st.column_config.NumberColumn("FCST IND", format="€%.2f"),
+                   "grp_otb_rev": st.column_config.NumberColumn("GRP OTB", format="€%.2f"),
+                   "grp_opz_rev": st.column_config.NumberColumn("GRP OPZ", format="€%.2f"),
+                   "finale_rev": st.column_config.NumberColumn("FINALE", format="€%.2f")
+               }
+           )
+       
+       analyzed_data = final_data
+       
+   except Exception as e:
+       st.error(f"Errore nel calcolo del forecast: {e}")
+       analyzed_data = None
 
 st.header("3️⃣ Dettagli Richiesta Gruppo")
 
@@ -837,13 +1042,13 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
                    unsafe_allow_html=True
                )
    else:
-       st.error("Nessun dato disponibile per l'analisi. Assicurati di caricare i file necessari.")
+       st.error("Nessun dato disponibile per l'analisi. Assicurati di caricare i file necessari o di inserire i dati manualmente.")
 
 st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Group Displacement Analyzer | v0.4.3 by Alessandro Merella; credits to Andrea Conte for the original idea<br>
+       <p>Group Displacement Analyzer | v0.4.5 developed by Alessandro Merella; Original excel concept and formulas by Andrea Conte<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}
        </p>
    </div>
