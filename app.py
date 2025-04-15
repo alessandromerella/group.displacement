@@ -933,63 +933,63 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
         # Bottone di conferma
         confirm = st.button("Conferma e Procedi", key="confirm_analysis")
         
-        if confirm:
-            with st.spinner("Elaborazione in corso..."):
-                analyzer = ExcelCompatibleDisplacementAnalyzer(hotel_capacity=hotel_capacity, iva_rate=iva_rate)
-                
-                analyzer.set_data(analyzed_data)
-                
-                decision_parameters = {
-                    'min_adr_perc_cy': 100,
-                    'min_adr_perc_ly': 100,
-                    'ancillary_weight': 1.0,
-                    'occ_threshold_low': 30,
-                    'occ_threshold_high': 80,
-                    'adr_flexibility_low': 0.3,
-                    'adr_flexibility_high': 0.1,
-                }
-           
-                analyzer.set_decision_parameters(decision_parameters)
-           
-            analyzer.set_group_request(
-               start_date=group_arrival,
-               end_date=group_departure,
-               num_rooms=num_rooms,
-               adr_lordo=adr_lordo,
-               adr_netto=adr_netto,
-               fb_revenue=fb_revenue,
-               meeting_revenue=meeting_revenue,
-               other_revenue=other_revenue
-            )
-           
+if confirm:
+    with st.spinner("Elaborazione in corso..."):
+        analyzer = ExcelCompatibleDisplacementAnalyzer(hotel_capacity=hotel_capacity, iva_rate=iva_rate)
+        
+        analyzer.set_data(analyzed_data)
+        
+        decision_parameters = {
+            'min_adr_perc_cy': 100,
+            'min_adr_perc_ly': 100,
+            'ancillary_weight': 1.0,
+            'occ_threshold_low': 30,
+            'occ_threshold_high': 80,
+            'adr_flexibility_low': 0.3,
+            'adr_flexibility_high': 0.1,
+        }
+   
+        analyzer.set_decision_parameters(decision_parameters)
+   
+        analyzer.set_group_request(
+           start_date=group_arrival,
+           end_date=group_departure,
+           num_rooms=num_rooms,
+           adr_lordo=adr_lordo,
+           adr_netto=adr_netto,
+           fb_revenue=fb_revenue,
+           meeting_revenue=meeting_revenue,
+           other_revenue=other_revenue
+        )
+   
         result_df = analyzer.analyze()
-           
+       
         if dates_for_analysis and len(dates_for_analysis) < len(date_options):
-               result_df = result_df[result_df['data'].isin(dates_for_analysis)]
+           result_df = result_df[result_df['data'].isin(dates_for_analysis)]
 
         metrics = analyzer.get_summary_metrics(result_df)
-           
+       
         detail_fig, summary_fig = analyzer.create_visualizations(result_df, metrics)
+       
+    st.subheader("Riepilogo Decisione")
+       
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("TOT. LORDO", f"€{metrics['total_lordo']:,.2f}")
+    with col2:
+        st.metric("TOT. NETTO", f"€{metrics['group_room_revenue'] + metrics['group_ancillary']:,.2f}")
+    with col3:
+        st.metric("REV DSPL", f"€{metrics['revenue_displaced']:,.2f}")
+    with col4:
+        st.metric("DIFF", f"€{metrics['total_impact']:,.2f}")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(detail_fig, use_container_width=True)
+    with col2:
+        st.plotly_chart(summary_fig, use_container_width=True)
            
-        st.subheader("Riepilogo Decisione")
-           
-        col1, col2, col3, col4 = st.columns(4)
-           with col1:
-               st.metric("TOT. LORDO", f"€{metrics['total_lordo']:,.2f}")
-           with col2:
-               st.metric("TOT. NETTO", f"€{metrics['group_room_revenue'] + metrics['group_ancillary']:,.2f}")
-           with col3:
-               st.metric("REV DSPL", f"€{metrics['revenue_displaced']:,.2f}")
-           with col4:
-               st.metric("DIFF", f"€{metrics['total_impact']:,.2f}")
-           
-        col1, col2 = st.columns(2)
-           with col1:
-               st.plotly_chart(detail_fig, use_container_width=True)
-           with col2:
-               st.plotly_chart(summary_fig, use_container_width=True)
-           
-        st.subheader("Riepilogo Finanziario")
+        st.subheader("Riepilogo")
            
         financial_df = pd.DataFrame({
                'Voce': ['TOT. LORDO', 'TOT. NETTO', 'Offerta', 'ADR netto', 'Ancillary', 'Room Profit', 
