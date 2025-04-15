@@ -951,18 +951,18 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
            
                 analyzer.set_decision_parameters(decision_parameters)
            
-            analyzer.set_group_request(
-                start_date=group_arrival,
-                end_date=group_departure,
-                num_rooms=num_rooms,
-                adr_lordo=adr_lordo,
-                adr_netto=adr_netto,
-                fb_revenue=fb_revenue,
-                meeting_revenue=meeting_revenue,
-                other_revenue=other_revenue
-            )
+           analyzer.set_group_request(
+               start_date=group_arrival,
+               end_date=group_departure,
+               num_rooms=num_rooms,
+               adr_lordo=adr_lordo,
+               adr_netto=adr_netto,
+               fb_revenue=fb_revenue,
+               meeting_revenue=meeting_revenue,
+               other_revenue=other_revenue
+           )
            
-            result_df = analyzer.analyze()
+           result_df = analyzer.analyze()
            
            if dates_for_analysis and len(dates_for_analysis) < len(date_options):
                result_df = result_df[result_df['data'].isin(dates_for_analysis)]
