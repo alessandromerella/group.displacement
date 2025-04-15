@@ -12,7 +12,7 @@ import time
 
 # -*- coding: utf-8 -*-
 
-st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.5.0", layout="wide")
+st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.4.5", layout="wide")
 
 def authenticate():
     if 'authenticated' in st.session_state and st.session_state['authenticated']:
@@ -962,7 +962,7 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
                other_revenue=other_revenue
            )
            
-           result_df = analyzer.analyze()
+          result_df = analyzer.analyze()
            
            if dates_for_analysis and len(dates_for_analysis) < len(date_options):
                result_df = result_df[result_df['data'].isin(dates_for_analysis)]
