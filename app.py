@@ -547,7 +547,7 @@ class ExcelCompatibleDisplacementAnalyzer:
         return fig, fig_summary
 
 
-st.title("Hotel Group Displacement Analyzer")
+st.title("Hotel Group Displacement Analyzer v0.5.1")
 st.markdown("*Strumento di analisi richieste preventivo gruppi*")
 
 with st.sidebar:
