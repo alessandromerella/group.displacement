@@ -933,7 +933,7 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
         # Bottone di conferma
         confirm = st.button("Conferma e Procedi", key="confirm_analysis")
         
-if confirm:
+ if confirm:
     with st.spinner("Elaborazione in corso..."):
         analyzer = ExcelCompatibleDisplacementAnalyzer(hotel_capacity=hotel_capacity, iva_rate=iva_rate)
         
@@ -1086,7 +1086,7 @@ if confirm:
                    """,
                    unsafe_allow_html=True
                )
-else:
+ else:
        st.error("Nessun dato disponibile per l'analisi. Assicurati di caricare i file necessari o di inserire i dati manualmente.")
 
 st.markdown("---")
