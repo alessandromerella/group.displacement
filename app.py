@@ -1024,12 +1024,13 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
                
                st.text_area("Email da inviare", email_text, height=300)
                
-               email_text_escaped = email_text.replace("\n", "\\n").replace("'", "\\'").replace('"', '\\"')
-               
+               email_text_base64 = base64.b64encode(email_text.encode('utf-8')).decode('utf-8')
+
                st.markdown(
                    f"""
                    <button onclick="
-                       navigator.clipboard.writeText('{email_text_escaped}');
+                       const emailText = atob('{email_text_base64}');
+                       navigator.clipboard.writeText(emailText);
                        alert('Email copiata negli appunti');
                    " style="
                        background-color: {COLOR_PALETTE['secondary']};
