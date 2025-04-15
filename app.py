@@ -25,16 +25,16 @@ def authenticate():
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("<h2 style='text-align: center;'>Group Displacement Analyzer</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center;'>Group Displacement Analyzer v0.5.1</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center;'>Accedi per continuare</p>", unsafe_allow_html=True)
     
     try:
         valid_usernames = st.secrets.credentials.usernames
         valid_passwords = st.secrets.credentials.passwords
     except:
-        valid_usernames = ["revenue_manager", "general_manager", "sales_manager"]
-        valid_passwords = ["v2025", "vr2025", "2025"]
-        st.warning("Utilizzo credenziali di sviluppo. In produzione, configura i secrets.")
+        valid_usernames = ["not_defined"]
+        valid_passwords = ["v2025"]
+        st.warning("Utilizzo credenziali di sviluppo. Non funzionanti in produzione")
     
     with st.form("login_form"):
         username = st.text_input("Username")
