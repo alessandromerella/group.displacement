@@ -1019,7 +1019,7 @@ else:
                     f"€{adr_lordo:.2f}",
                     f"€{adr_netto:.2f}",
                     f"€{metrics['group_ancillary']:,.2f}",
-                    f"€{metrics['group_room_revenue']:,.2f}",
+                    f"€{(metrics['group_room_revenue'] * (1 + iva_rate)):,.2f}",  # Room Profit GROSS (lordo IVA)
                     f"€{metrics['room_profit']:,.2f}",
                     f"€{(metrics['extra_vs_ly'] * metrics['accepted_rooms']):,.2f}",
                     f"€{metrics['extra_vs_ly']:,.2f}",
