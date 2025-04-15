@@ -932,7 +932,8 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
             
         # Bottone di conferma
         confirm = st.button("Conferma e Procedi", key="confirm_analysis")
-        
+
+confirm = st.button("Conferma Analisi")   
 if confirm:
     with st.spinner("Elaborazione in corso..."):
         analyzer = ExcelCompatibleDisplacementAnalyzer(hotel_capacity=hotel_capacity, iva_rate=iva_rate)
