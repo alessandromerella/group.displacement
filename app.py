@@ -12,7 +12,7 @@ import time
 
 # -*- coding: utf-8 -*-
 
-st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.4.5", layout="wide")
+st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.5.0", layout="wide")
 
 def authenticate():
     if 'authenticated' in st.session_state and st.session_state['authenticated']:
