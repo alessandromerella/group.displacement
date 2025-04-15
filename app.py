@@ -967,13 +967,13 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
         if dates_for_analysis and len(dates_for_analysis) < len(date_options):
                result_df = result_df[result_df['data'].isin(dates_for_analysis)]
 
-           metrics = analyzer.get_summary_metrics(result_df)
+        metrics = analyzer.get_summary_metrics(result_df)
            
-           detail_fig, summary_fig = analyzer.create_visualizations(result_df, metrics)
+        detail_fig, summary_fig = analyzer.create_visualizations(result_df, metrics)
            
-           st.subheader("Riepilogo Decisione")
+        st.subheader("Riepilogo Decisione")
            
-           col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4 = st.columns(4)
            with col1:
                st.metric("TOT. LORDO", f"€{metrics['total_lordo']:,.2f}")
            with col2:
@@ -983,15 +983,15 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
            with col4:
                st.metric("DIFF", f"€{metrics['total_impact']:,.2f}")
            
-           col1, col2 = st.columns(2)
+        col1, col2 = st.columns(2)
            with col1:
                st.plotly_chart(detail_fig, use_container_width=True)
            with col2:
                st.plotly_chart(summary_fig, use_container_width=True)
            
-           st.subheader("Riepilogo Finanziario")
+        st.subheader("Riepilogo Finanziario")
            
-           financial_df = pd.DataFrame({
+        financial_df = pd.DataFrame({
                'Voce': ['TOT. LORDO', 'TOT. NETTO', 'Offerta', 'ADR netto', 'Ancillary', 'Room Profit', 
                       'Extra IND LY', 'Extra per room IND LY', 'Extra TY', 'Total Rev Profit'],
                'Valore': [
@@ -1008,14 +1008,14 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
                ]
            })
            
-           st.table(financial_df)
+        st.table(financial_df)
            
-           st.subheader("Dati Dettagliati")
-           display_cols = ['data', 'giorno', 'finale_rn', 'camere_gruppo', 'camere_disponibili', 
+        st.subheader("Dati Dettagliati")
+        display_cols = ['data', 'giorno', 'finale_rn', 'camere_gruppo', 'camere_disponibili', 
                          'camere_displaced', 'adr_gruppo_netto', 'finale_adr', 
                          'revenue_camere_gruppo_effettivo', 'revenue_displaced', 'impatto_revenue_totale']
            
-           st.dataframe(
+        st.dataframe(
                result_df[display_cols],
                column_config={
                    "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
@@ -1032,15 +1032,15 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
                }
            )
            
-           st.markdown(get_csv_download_link(result_df, f"displacement_{group_name}", "📥 Scarica dati completi (CSV)"), unsafe_allow_html=True)
+        st.markdown(get_csv_download_link(result_df, f"displacement_{group_name}", "📥 Scarica dati completi (CSV)"), unsafe_allow_html=True)
            
-           st.header("Decisione Finale")
+        st.header("Decisione Finale")
            
-           decision_color = COLOR_PALETTE["positive"] if metrics['should_accept'] else COLOR_PALETTE["negative"]
-           decision_text = "ACCETTA GRUPPO" if metrics['should_accept'] else "DECLINA GRUPPO"
+        decision_color = COLOR_PALETTE["positive"] if metrics['should_accept'] else COLOR_PALETTE["negative"]
+        decision_text = "ACCETTA GRUPPO" if metrics['should_accept'] else "DECLINA GRUPPO"
            
-           st.markdown(f"""
-           <div style="background-color:{decision_color}; padding:20px; border-radius:10px; text-align:center; margin-top:20px;">
+        st.markdown(f"""
+        <div style="background-color:{decision_color}; padding:20px; border-radius:10px; text-align:center; margin-top:20px;">
                <h2 style="color:white; margin:0;">{decision_text}</h2>
                <p style="color:white; margin-top:10px;">
                    Impatto Revenue: €{metrics['total_impact']:,.2f} | 
@@ -1049,9 +1049,9 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
                    Displacement: {metrics['displaced_rooms']} camere
                </p>
            </div>
-           """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
            
-           if metrics['needs_authorization']:
+        if metrics['needs_authorization']:
                st.warning("⚠️ Questa richiesta gruppo supera il valore di €35.000 e richiede autorizzazione")
                
                st.subheader("Email di Richiesta Autorizzazione")
