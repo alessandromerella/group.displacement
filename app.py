@@ -964,7 +964,7 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
            
         result_df = analyzer.analyze()
            
-           if dates_for_analysis and len(dates_for_analysis) < len(date_options):
+        if dates_for_analysis and len(dates_for_analysis) < len(date_options):
                result_df = result_df[result_df['data'].isin(dates_for_analysis)]
 
            metrics = analyzer.get_summary_metrics(result_df)
