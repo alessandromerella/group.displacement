@@ -951,7 +951,7 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
            
                 analyzer.set_decision_parameters(decision_parameters)
            
-           analyzer.set_group_request(
+            analyzer.set_group_request(
                start_date=group_arrival,
                end_date=group_departure,
                num_rooms=num_rooms,
@@ -960,7 +960,7 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
                fb_revenue=fb_revenue,
                meeting_revenue=meeting_revenue,
                other_revenue=other_revenue
-           )
+            )
            
            result_df = analyzer.analyze()
            
