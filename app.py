@@ -891,24 +891,63 @@ with col2:
    else:
        st.success(f"✅ Valore totale: €{total_value:,.2f}")
 
+# Opzioni analisi - usando multiselect come nella v3.0
+date_options = pd.date_range(start=group_arrival, end=group_departure - timedelta(days=1))
+formatted_date_options = [f"{d.strftime('%a')} {d.strftime('%d/%m/%Y')}" for d in date_options]
+date_dict = dict(zip(formatted_date_options, date_options))
+
+selected_formatted_dates = st.multiselect(
+    "Seleziona date da includere nell'analisi (lascia vuoto per tutte)",
+    options=formatted_date_options,
+    default=formatted_date_options
+)
+
+# Converti le date formattate selezionate in oggetti datetime
+dates_for_analysis = [date_dict[d] for d in selected_formatted_dates] if selected_formatted_dates else date_options
+
 st.header("4️⃣ Analisi Displacement")
 
 if st.button("Esegui Analisi", type="primary", use_container_width=True):
-   if analyzed_data is not None:
-       with st.spinner("Elaborazione in corso..."):
-           analyzer = ExcelCompatibleDisplacementAnalyzer(hotel_capacity=hotel_capacity, iva_rate=iva_rate)
-           
-           analyzer.set_data(analyzed_data)
-           
-           decision_parameters = {
-               'min_adr_perc_cy': 100,
-               'min_adr_perc_ly': 100,
-               'ancillary_weight': 1.0,
-               'occ_threshold_low': 30,
-               'occ_threshold_high': 80,
-               'adr_flexibility_low': 0.3,
-               'adr_flexibility_high': 0.1,
-           }
+    if analyzed_data is not None:
+        # Popup di double check
+        with st.expander("Verifica parametri analisi", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info(f"""
+                **Dettagli Gruppo**
+                - Nome: {group_name}
+                - Periodo: {group_arrival.strftime('%d/%m/%Y')} - {group_departure.strftime('%d/%m/%Y')} ({date_nights} notti)
+                - Camere: {num_rooms} ROH
+                - Giorni analizzati: {len(dates_for_analysis)} di {len(date_options)}
+                """)
+            
+            with col2:
+                st.info(f"""
+                **Dettagli Economici**
+                - ADR lordo: €{adr_lordo:.2f}
+                - ADR netto: €{adr_netto:.2f}
+                - Revenue ancillare: €{total_ancillary:.2f}
+                - Valore totale: €{total_value:.2f}
+                """)
+            
+        # Bottone di conferma
+        confirm = st.button("Conferma e Procedi", key="confirm_analysis")
+        
+        if confirm:
+            with st.spinner("Elaborazione in corso..."):
+                analyzer = ExcelCompatibleDisplacementAnalyzer(hotel_capacity=hotel_capacity, iva_rate=iva_rate)
+                
+                analyzer.set_data(analyzed_data)
+                
+                decision_parameters = {
+                    'min_adr_perc_cy': 100,
+                    'min_adr_perc_ly': 100,
+                    'ancillary_weight': 1.0,
+                    'occ_threshold_low': 30,
+                    'occ_threshold_high': 80,
+                    'adr_flexibility_low': 0.3,
+                    'adr_flexibility_high': 0.1,
+                }
            
            analyzer.set_decision_parameters(decision_parameters)
            
@@ -925,6 +964,9 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
            
            result_df = analyzer.analyze()
            
+           if dates_for_analysis and len(dates_for_analysis) < len(date_options):
+               result_df = result_df[result_df['data'].isin(dates_for_analysis)]
+
            metrics = analyzer.get_summary_metrics(result_df)
            
            detail_fig, summary_fig = analyzer.create_visualizations(result_df, metrics)
@@ -1051,7 +1093,7 @@ st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Hotel Group Displacement Analyzer | v0.4.6 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
+       <p>Hotel Group Displacement Analyzer | v0.5.0 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}
        </p>
    </div>
