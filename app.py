@@ -10,9 +10,7 @@ import io
 import base64
 import time
 
-# -*- coding: utf-8 -*-
-
-st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.5.1", layout="wide")
+st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.5.2", layout="wide")
 
 def authenticate():
     if 'authenticated' in st.session_state and st.session_state['authenticated']:
@@ -25,7 +23,7 @@ def authenticate():
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("<h2 style='text-align: center;'>Group Displacement Analyzer v0.5.1</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center;'>Group Displacement Analyzer v0.5.2</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center;'>Accedi per continuare</p>", unsafe_allow_html=True)
     
     try:
@@ -547,7 +545,7 @@ class ExcelCompatibleDisplacementAnalyzer:
         return fig, fig_summary
 
 
-st.title("Hotel Group Displacement Analyzer v0.5.1")
+st.title("Hotel Group Displacement Analyzer v0.5.2")
 st.markdown("*Strumento di analisi richieste preventivo gruppi*")
 
 with st.sidebar:
@@ -663,7 +661,6 @@ if data_source == "Import file Excel":
 elif data_source == "Inserimento manuale":
    st.info("Inserisci manualmente i dati per il periodo selezionato")
    
-   # Prepara struttura base dei dati
    base_data = {
        'data': date_range,
        'giorno': [d.strftime('%a') for d in date_range],
@@ -681,7 +678,6 @@ elif data_source == "Inserimento manuale":
 
    df_base = pd.DataFrame(base_data)
    
-   # Room Nights
    st.subheader("Inserimento Room Nights")
    col1, col2 = st.columns(2)
    
@@ -713,7 +709,6 @@ elif data_source == "Inserimento manuale":
            }
        )
    
-   # ADR
    st.subheader("Inserimento ADR")
    col1, col2 = st.columns(2)
    
@@ -745,7 +740,6 @@ elif data_source == "Inserimento manuale":
            }
        )
    
-   # Calcolo automatico del forecast
    st.subheader("Parametri Forecast")
    col1, col2 = st.columns(2)
    
@@ -764,20 +758,16 @@ elif data_source == "Inserimento manuale":
            pickup_value = st.number_input("Camere da aggiungere", 0, 100, 10,
                                         help="Aggiunge questo numero di camere all'OTB attuale")
    
-   # Combinare i dati e calcolare il forecast
    try:
-       # Combina i dati di room nights
        final_data = edited_rn_cy.copy()
        final_data = pd.merge(final_data, edited_rn_ly[['data_ly', 'ly_ind_rn']], 
                            left_index=True, right_index=True)
        
-       # Combina i dati di ADR
        final_data = pd.merge(final_data, edited_adr_cy[['otb_ind_adr', 'grp_otb_adr', 'grp_opz_adr']], 
                            left_index=True, right_index=True)
        final_data = pd.merge(final_data, edited_adr_ly[['ly_ind_adr']], 
                            left_index=True, right_index=True)
        
-       # Calcola il forecast basato sul metodo selezionato
        if forecast_method == "Basato su LY":
            final_data['fcst_ind_rn'] = np.ceil(final_data['ly_ind_rn'] * pickup_factor)
        elif forecast_method == "Percentuale su OTB":
@@ -785,14 +775,11 @@ elif data_source == "Inserimento manuale":
        else:
            final_data['fcst_ind_rn'] = final_data['otb_ind_rn'] + pickup_value
        
-       # Calcola ADR del forecast (media ponderata tra OTB e nuovo business)
-       final_data['fcst_ind_adr'] = final_data['otb_ind_adr']  # Semplificato per ora
+       final_data['fcst_ind_adr'] = final_data['otb_ind_adr']
        
-       # Calcola totali
        final_data['finale_rn'] = final_data['fcst_ind_rn'] + final_data['grp_otb_rn']
        final_data['finale_opz_rn'] = final_data['fcst_ind_rn'] + final_data['grp_otb_rn'] + final_data['grp_opz_rn']
        
-       # Calcola revenue
        final_data['otb_ind_rev'] = final_data['otb_ind_rn'] * final_data['otb_ind_adr']
        final_data['ly_ind_rev'] = final_data['ly_ind_rn'] * final_data['ly_ind_adr']
        final_data['grp_otb_rev'] = final_data['grp_otb_rn'] * final_data['grp_otb_adr']
@@ -804,7 +791,6 @@ elif data_source == "Inserimento manuale":
                                         final_data['finale_rev'] / final_data['finale_rn'],
                                         0)
        
-       # Mostra il forecast calcolato
        st.subheader("Forecast Calcolato")
        tab1, tab2, tab3 = st.tabs(["Room Nights", "ADR", "Revenue"])
        
@@ -891,7 +877,6 @@ with col2:
    else:
        st.success(f"✅ Valore totale: €{total_value:,.2f}")
 
-# Opzioni analisi - usando multiselect come nella v3.0
 date_options = pd.date_range(start=group_arrival, end=group_departure - timedelta(days=1))
 formatted_date_options = [f"{d.strftime('%a')} {d.strftime('%d/%m/%Y')}" for d in date_options]
 date_dict = dict(zip(formatted_date_options, date_options))
@@ -902,201 +887,203 @@ selected_formatted_dates = st.multiselect(
     default=formatted_date_options
 )
 
-# Converti le date formattate selezionate in oggetti datetime
 dates_for_analysis = [date_dict[d] for d in selected_formatted_dates] if selected_formatted_dates else date_options
 
 st.header("4️⃣ Analisi Displacement")
 
-if st.button("Esegui Analisi", type="primary", use_container_width=True):
-    if analyzed_data is not None:
-        # Popup di double check
-        with st.expander("Verifica parametri analisi", expanded=True):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.info(f"""
-                **Dettagli Gruppo**
-                - Nome: {group_name}
-                - Periodo: {group_arrival.strftime('%d/%m/%Y')} - {group_departure.strftime('%d/%m/%Y')} ({date_nights} notti)
-                - Camere: {num_rooms} ROH
-                - Giorni analizzati: {len(dates_for_analysis)} di {len(date_options)}
-                """)
-            
-            with col2:
-                st.info(f"""
-                **Dettagli Economici**
-                - ADR lordo: €{adr_lordo:.2f}
-                - ADR netto: €{adr_netto:.2f}
-                - Revenue ancillare: €{total_ancillary:.2f}
-                - Valore totale: €{total_value:.2f}
-                """)
-            
-        # Bottone di conferma
-        if st.button("Conferma e Procedi", key="confirm_analysis"):
-            st.session_state['confirmed_params'] = True
-            st.success("Parametri confermati! Clicca 'Conferma Analisi' per procedere.")
-
-# Check if parameters were confirmed
 if 'confirmed_params' not in st.session_state:
     st.session_state['confirmed_params'] = False
 
-# Only show the final confirm button if parameters were confirmed
-confirm = False
-if st.session_state['confirmed_params']:
-    confirm = st.button("Conferma Analisi")   
-if confirm:
-    with st.spinner("Elaborazione in corso..."):
-        analyzer = ExcelCompatibleDisplacementAnalyzer(hotel_capacity=hotel_capacity, iva_rate=iva_rate)
-        
-        analyzer.set_data(analyzed_data)
-        
-        decision_parameters = {
-            'min_adr_perc_cy': 100,
-            'min_adr_perc_ly': 100,
-            'ancillary_weight': 1.0,
-            'occ_threshold_low': 30,
-            'occ_threshold_high': 80,
-            'adr_flexibility_low': 0.3,
-            'adr_flexibility_high': 0.1,
-        }
-   
-        analyzer.set_decision_parameters(decision_parameters)
-   
-        analyzer.set_group_request(
-           start_date=group_arrival,
-           end_date=group_departure,
-           num_rooms=num_rooms,
-           adr_lordo=adr_lordo,
-           adr_netto=adr_netto,
-           fb_revenue=fb_revenue,
-           meeting_revenue=meeting_revenue,
-           other_revenue=other_revenue
-        )
-   
-        result_df = analyzer.analyze()
-       
-        if dates_for_analysis and len(dates_for_analysis) < len(date_options):
-           result_df = result_df[result_df['data'].isin(dates_for_analysis)]
-
-        metrics = analyzer.get_summary_metrics(result_df)
-       
-        detail_fig, summary_fig = analyzer.create_visualizations(result_df, metrics)
-       
-    st.subheader("Riepilogo Decisione")
-       
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("TOT. LORDO", f"€{metrics['total_lordo']:,.2f}")
-    with col2:
-        st.metric("TOT. NETTO", f"€{metrics['group_room_revenue'] + metrics['group_ancillary']:,.2f}")
-    with col3:
-        st.metric("REV DSPL", f"€{metrics['revenue_displaced']:,.2f}")
-    with col4:
-        st.metric("DIFF", f"€{metrics['total_impact']:,.2f}")
+if not st.session_state['confirmed_params']:
+    if st.button("Esegui Analisi", type="primary", use_container_width=True):
+        if analyzed_data is not None:
+            with st.expander("Verifica parametri analisi", expanded=True):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.info(f"""
+                    **Dettagli Gruppo**
+                    - Nome: {group_name}
+                    - Periodo: {group_arrival.strftime('%d/%m/%Y')} - {group_departure.strftime('%d/%m/%Y')} ({date_nights} notti)
+                    - Camere: {num_rooms} ROH
+                    - Giorni analizzati: {len(dates_for_analysis)} di {len(date_options)}
+                    """)
+                
+                with col2:
+                    st.info(f"""
+                    **Dettagli Economici**
+                    - ADR lordo: €{adr_lordo:.2f}
+                    - ADR netto: €{adr_netto:.2f}
+                    - Revenue ancillare: €{total_ancillary:.2f}
+                    - Valore totale: €{total_value:.2f}
+                    """)
+            
+            if st.button("Conferma e Procedi", key="confirm_analysis"):
+                st.session_state['confirmed_params'] = True
+                st.success("Parametri confermati! La pagina si aggiornerà...")
+                st.rerun()
+else:
+    st.success("✅ Parametri confermati! Clicca 'Conferma Analisi' per procedere.")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.plotly_chart(detail_fig, use_container_width=True)
-    with col2:
-        st.plotly_chart(summary_fig, use_container_width=True)
+    confirm = st.button("Conferma Analisi", type="primary", use_container_width=True)
+    
+    if st.button("Modifica parametri", key="cancel_confirm"):
+        st.session_state['confirmed_params'] = False
+        st.rerun()
+        
+    if confirm:
+        with st.spinner("Elaborazione in corso..."):
+            analyzer = ExcelCompatibleDisplacementAnalyzer(hotel_capacity=hotel_capacity, iva_rate=iva_rate)
+            
+            analyzer.set_data(analyzed_data)
+            
+            decision_parameters = {
+                'min_adr_perc_cy': 100,
+                'min_adr_perc_ly': 100,
+                'ancillary_weight': 1.0,
+                'occ_threshold_low': 30,
+                'occ_threshold_high': 80,
+                'adr_flexibility_low': 0.3,
+                'adr_flexibility_high': 0.1,
+            }
+       
+            analyzer.set_decision_parameters(decision_parameters)
+       
+            analyzer.set_group_request(
+               start_date=group_arrival,
+               end_date=group_departure,
+               num_rooms=num_rooms,
+               adr_lordo=adr_lordo,
+               adr_netto=adr_netto,
+               fb_revenue=fb_revenue,
+               meeting_revenue=meeting_revenue,
+               other_revenue=other_revenue
+            )
+       
+            result_df = analyzer.analyze()
            
-        st.subheader("Riepilogo")
+            if dates_for_analysis and len(dates_for_analysis) < len(date_options):
+               result_df = result_df[result_df['data'].isin(dates_for_analysis)]
+    
+            metrics = analyzer.get_summary_metrics(result_df)
            
-        financial_df = pd.DataFrame({
-            'Voce': ['TOT. LORDO', 'TOT. NETTO', 'Offerta', 'ADR netto', 'Ancillary', 'Room Profit GROSS', 
-                   'Room Profit NET', 'Extra IND LY', 'Extra per room IND LY', 'Extra TY', 'Total Rev Profit'],
-            'Valore': [
-                f"€{metrics['total_lordo']:,.2f}",
-                f"€{metrics['group_room_revenue'] + metrics['group_ancillary']:,.2f}",
-                f"€{adr_lordo:.2f}",
-                f"€{adr_netto:.2f}",
-                f"€{metrics['group_ancillary']:,.2f}",
-                f"€{metrics['group_room_revenue']:,.2f}",
-                f"€{metrics['room_profit']:,.2f}",
-                f"€{(metrics['extra_vs_ly'] * metrics['accepted_rooms']):,.2f}",
-                f"€{metrics['extra_vs_ly']:,.2f}",
-                f"€{metrics['room_profit']:,.2f}",
-                f"€{metrics['total_rev_profit']:,.2f}"
-            ]
-        })
+            detail_fig, summary_fig = analyzer.create_visualizations(result_df, metrics)
            
-        st.table(financial_df)
+        st.subheader("Riepilogo Decisione")
            
-        st.subheader("Dati Dettagliati")
-        display_cols = ['data', 'giorno', 'finale_rn', 'camere_gruppo', 'camere_disponibili', 
-                         'camere_displaced', 'adr_gruppo_netto', 'finale_adr', 
-                         'revenue_camere_gruppo_effettivo', 'revenue_displaced', 'impatto_revenue_totale']
-           
-        st.dataframe(
-               result_df[display_cols],
-               column_config={
-                   "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
-                   "giorno": "Giorno",
-                   "finale_rn": st.column_config.NumberColumn("FCST OTB", format="%d"),
-                   "camere_gruppo": st.column_config.NumberColumn("REQ", format="%d"),
-                   "camere_disponibili": st.column_config.NumberColumn("Disponibili", format="%d"),
-                   "camere_displaced": st.column_config.NumberColumn("DSPL", format="%d"),
-                   "adr_gruppo_netto": st.column_config.NumberColumn("ADR Netto", format="€%.2f"),
-                   "finale_adr": st.column_config.NumberColumn("ADR Attuale", format="€%.2f"),
-                   "revenue_camere_gruppo_effettivo": st.column_config.NumberColumn("REV REQ", format="€%.2f"),
-                   "revenue_displaced": st.column_config.NumberColumn("REV DSPL", format="€%.2f"),
-                   "impatto_revenue_totale": st.column_config.NumberColumn("DIFF", format="€%.2f")
-               }
-           )
-           
-        st.markdown(get_csv_download_link(result_df, f"displacement_{group_name}", "📥 Scarica dati completi (CSV)"), unsafe_allow_html=True)
-           
-        st.header("Decisione Finale")
-           
-        decision_color = COLOR_PALETTE["positive"] if metrics['should_accept'] else COLOR_PALETTE["negative"]
-        decision_text = "ACCETTA GRUPPO" if metrics['should_accept'] else "DECLINA GRUPPO"
-           
-        st.markdown(f"""
-        <div style="background-color:{decision_color}; padding:20px; border-radius:10px; text-align:center; margin-top:20px;">
-               <h2 style="color:white; margin:0;">{decision_text}</h2>
-               <p style="color:white; margin-top:10px;">
-                   Impatto Revenue: €{metrics['total_impact']:,.2f} | 
-                   ADR Netto: €{metrics['current_adr_netto']:.2f} | 
-                   Camere: {metrics['accepted_rooms']}/{metrics['total_group_rooms']} |
-                   Displacement: {metrics['displaced_rooms']} camere
-               </p>
-           </div>
-        """, unsafe_allow_html=True)
-           
-        if metrics['needs_authorization']:
-               st.warning("⚠️ Questa richiesta gruppo supera il valore di €35.000 e richiede autorizzazione")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("TOT. LORDO", f"€{metrics['total_lordo']:,.2f}")
+        with col2:
+            st.metric("TOT. NETTO", f"€{metrics['group_room_revenue'] + metrics['group_ancillary']:,.2f}")
+        with col3:
+            st.metric("REV DSPL", f"€{metrics['revenue_displaced']:,.2f}")
+        with col4:
+            st.metric("DIFF", f"€{metrics['total_impact']:,.2f}")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(detail_fig, use_container_width=True)
+        with col2:
+            st.plotly_chart(summary_fig, use_container_width=True)
                
-               st.subheader("Email di Richiesta Autorizzazione")
+            st.subheader("Riepilogo")
                
-               email_text = generate_auth_email(
-                   group_name=group_name,
-                   total_revenue=metrics['total_lordo'],
-                   dates=result_df['data'].tolist(),
-                   rooms=num_rooms,
-                   adr=adr_lordo
+            financial_df = pd.DataFrame({
+                'Voce': ['TOT. LORDO', 'TOT. NETTO', 'Offerta', 'ADR netto', 'Ancillary', 'Room Profit GROSS', 
+                       'Room Profit NET', 'Extra IND LY', 'Extra per room IND LY', 'Extra TY', 'Total Rev Profit'],
+                'Valore': [
+                    f"€{metrics['total_lordo']:,.2f}",
+                    f"€{metrics['group_room_revenue'] + metrics['group_ancillary']:,.2f}",
+                    f"€{adr_lordo:.2f}",
+                    f"€{adr_netto:.2f}",
+                    f"€{metrics['group_ancillary']:,.2f}",
+                    f"€{metrics['group_room_revenue']:,.2f}",
+                    f"€{metrics['room_profit']:,.2f}",
+                    f"€{(metrics['extra_vs_ly'] * metrics['accepted_rooms']):,.2f}",
+                    f"€{metrics['extra_vs_ly']:,.2f}",
+                    f"€{metrics['room_profit']:,.2f}",
+                    f"€{metrics['total_rev_profit']:,.2f}"
+                ]
+            })
+               
+            st.table(financial_df)
+               
+            st.subheader("Dati Dettagliati")
+            display_cols = ['data', 'giorno', 'finale_rn', 'camere_gruppo', 'camere_disponibili', 
+                             'camere_displaced', 'adr_gruppo_netto', 'finale_adr', 
+                             'revenue_camere_gruppo_effettivo', 'revenue_displaced', 'impatto_revenue_totale']
+               
+            st.dataframe(
+                   result_df[display_cols],
+                   column_config={
+                       "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+                       "giorno": "Giorno",
+                       "finale_rn": st.column_config.NumberColumn("FCST OTB", format="%d"),
+                       "camere_gruppo": st.column_config.NumberColumn("REQ", format="%d"),
+                       "camere_disponibili": st.column_config.NumberColumn("Disponibili", format="%d"),
+                       "camere_displaced": st.column_config.NumberColumn("DSPL", format="%d"),
+                       "adr_gruppo_netto": st.column_config.NumberColumn("ADR Netto", format="€%.2f"),
+                       "finale_adr": st.column_config.NumberColumn("ADR Attuale", format="€%.2f"),
+                       "revenue_camere_gruppo_effettivo": st.column_config.NumberColumn("REV REQ", format="€%.2f"),
+                       "revenue_displaced": st.column_config.NumberColumn("REV DSPL", format="€%.2f"),
+                       "impatto_revenue_totale": st.column_config.NumberColumn("DIFF", format="€%.2f")
+                   }
                )
                
-               st.text_area("Email da inviare", email_text, height=300)
+            st.markdown(get_csv_download_link(result_df, f"displacement_{group_name}", "📥 Scarica dati completi (CSV)"), unsafe_allow_html=True)
                
-               email_text_base64 = base64.b64encode(email_text.encode('utf-8')).decode('utf-8')
-
-               st.markdown(
-                   f"""
-                   <button onclick="
-                       const emailText = atob('{email_text_base64}');
-                       navigator.clipboard.writeText(emailText);
-                       alert('Email copiata negli appunti');
-                   " style="
-                       background-color: {COLOR_PALETTE['secondary']};
-                       color: white;
-                       border: none;
-                       padding: 10px 20px;
-                       border-radius: 5px;
-                       cursor: pointer;
-                       font-family: 'Inter', sans-serif;
-                   ">📋 Copia Email</button>
-                   """,
-                   unsafe_allow_html=True
-               )
+            st.header("Decisione Finale")
+               
+            decision_color = COLOR_PALETTE["positive"] if metrics['should_accept'] else COLOR_PALETTE["negative"]
+            decision_text = "ACCETTA GRUPPO" if metrics['should_accept'] else "DECLINA GRUPPO"
+               
+            st.markdown(f"""
+            <div style="background-color:{decision_color}; padding:20px; border-radius:10px; text-align:center; margin-top:20px;">
+                   <h2 style="color:white; margin:0;">{decision_text}</h2>
+                   <p style="color:white; margin-top:10px;">
+                       Impatto Revenue: €{metrics['total_impact']:,.2f} | 
+                       ADR Netto: €{metrics['current_adr_netto']:.2f} | 
+                       Camere: {metrics['accepted_rooms']}/{metrics['total_group_rooms']} |
+                       Displacement: {metrics['displaced_rooms']} camere
+                   </p>
+               </div>
+            """, unsafe_allow_html=True)
+               
+            if metrics['needs_authorization']:
+                   st.warning("⚠️ Questa richiesta gruppo supera il valore di €35.000 e richiede autorizzazione")
+                   
+                   st.subheader("Email di Richiesta Autorizzazione")
+                   
+                   email_text = generate_auth_email(
+                       group_name=group_name,
+                       total_revenue=metrics['total_lordo'],
+                       dates=result_df['data'].tolist(),
+                       rooms=num_rooms,
+                       adr=adr_lordo
+                   )
+                   
+                   st.text_area("Email da inviare", email_text, height=300)
+                   
+                   email_text_base64 = base64.b64encode(email_text.encode('utf-8')).decode('utf-8')
+    
+                   st.markdown(
+                       f"""
+                       <button onclick="
+                           const emailText = atob('{email_text_base64}');
+                           navigator.clipboard.writeText(emailText);
+                           alert('Email copiata negli appunti');
+                       " style="
+                           background-color: {COLOR_PALETTE['secondary']};
+                           color: white;
+                           border: none;
+                           padding: 10px 20px;
+                           border-radius: 5px;
+                           cursor: pointer;
+                           font-family: 'Inter', sans-serif;
+                       ">📋 Copia Email</button>
+                       """,
+                       unsafe_allow_html=True
+                   )
 elif analyzed_data is None:
     st.error("Nessun dato disponibile per l'analisi. Assicurati di caricare i file necessari o di inserire i dati manualmente.")
 
@@ -1104,7 +1091,7 @@ st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Hotel Group Displacement Analyzer | v0.5.1 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
+       <p>Hotel Group Displacement Analyzer | v0.5.2 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}<br>
        Distributed under MIT License
        </p>
