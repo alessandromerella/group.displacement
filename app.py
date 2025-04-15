@@ -1086,7 +1086,7 @@ if confirm:
                    """,
                    unsafe_allow_html=True
                )
-   else:
+else:
        st.error("Nessun dato disponibile per l'analisi. Assicurati di caricare i file necessari o di inserire i dati manualmente.")
 
 st.markdown("---")
