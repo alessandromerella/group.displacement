@@ -1094,7 +1094,8 @@ st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
        <p>Hotel Group Displacement Analyzer | v0.5.0 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
-       Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}
+       Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}<br>
+       Distributed under MIT License
        </p>
    </div>
    """, 
