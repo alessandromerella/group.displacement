@@ -12,7 +12,7 @@ import time
 
 # -*- coding: utf-8 -*-
 
-st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.4.5", layout="wide")
+st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.5.1", layout="wide")
 
 def authenticate():
     if 'authenticated' in st.session_state and st.session_state['authenticated']:
@@ -931,9 +931,18 @@ if st.button("Esegui Analisi", type="primary", use_container_width=True):
                 """)
             
         # Bottone di conferma
-        confirm = st.button("Conferma e Procedi", key="confirm_analysis")
+        if st.button("Conferma e Procedi", key="confirm_analysis"):
+            st.session_state['confirmed_params'] = True
+            st.success("Parametri confermati! Clicca 'Conferma Analisi' per procedere.")
 
-confirm = st.button("Conferma Analisi")   
+# Check if parameters were confirmed
+if 'confirmed_params' not in st.session_state:
+    st.session_state['confirmed_params'] = False
+
+# Only show the final confirm button if parameters were confirmed
+confirm = False
+if st.session_state['confirmed_params']:
+    confirm = st.button("Conferma Analisi")   
 if confirm:
     with st.spinner("Elaborazione in corso..."):
         analyzer = ExcelCompatibleDisplacementAnalyzer(hotel_capacity=hotel_capacity, iva_rate=iva_rate)
@@ -993,21 +1002,22 @@ if confirm:
         st.subheader("Riepilogo")
            
         financial_df = pd.DataFrame({
-               'Voce': ['TOT. LORDO', 'TOT. NETTO', 'Offerta', 'ADR netto', 'Ancillary', 'Room Profit', 
-                      'Extra IND LY', 'Extra per room IND LY', 'Extra TY', 'Total Rev Profit'],
-               'Valore': [
-                   f"€{metrics['total_lordo']:,.2f}",
-                   f"€{metrics['group_room_revenue'] + metrics['group_ancillary']:,.2f}",
-                   f"€{adr_lordo:.2f}",
-                   f"€{adr_netto:.2f}",
-                   f"€{metrics['group_ancillary']:,.2f}",
-                   f"€{metrics['room_profit']:,.2f}",
-                   f"€{(metrics['extra_vs_ly'] * metrics['accepted_rooms']):,.2f}",
-                   f"€{metrics['extra_vs_ly']:,.2f}",
-                   f"€{metrics['room_profit']:,.2f}",
-                   f"€{metrics['total_rev_profit']:,.2f}"
-               ]
-           })
+            'Voce': ['TOT. LORDO', 'TOT. NETTO', 'Offerta', 'ADR netto', 'Ancillary', 'Room Profit GROSS', 
+                   'Room Profit NET', 'Extra IND LY', 'Extra per room IND LY', 'Extra TY', 'Total Rev Profit'],
+            'Valore': [
+                f"€{metrics['total_lordo']:,.2f}",
+                f"€{metrics['group_room_revenue'] + metrics['group_ancillary']:,.2f}",
+                f"€{adr_lordo:.2f}",
+                f"€{adr_netto:.2f}",
+                f"€{metrics['group_ancillary']:,.2f}",
+                f"€{metrics['group_room_revenue']:,.2f}",
+                f"€{metrics['room_profit']:,.2f}",
+                f"€{(metrics['extra_vs_ly'] * metrics['accepted_rooms']):,.2f}",
+                f"€{metrics['extra_vs_ly']:,.2f}",
+                f"€{metrics['room_profit']:,.2f}",
+                f"€{metrics['total_rev_profit']:,.2f}"
+            ]
+        })
            
         st.table(financial_df)
            
@@ -1021,7 +1031,7 @@ if confirm:
                column_config={
                    "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
                    "giorno": "Giorno",
-                   "finale_rn": st.column_config.NumberColumn("OTB", format="%d"),
+                   "finale_rn": st.column_config.NumberColumn("FCST OTB", format="%d"),
                    "camere_gruppo": st.column_config.NumberColumn("REQ", format="%d"),
                    "camere_disponibili": st.column_config.NumberColumn("Disponibili", format="%d"),
                    "camere_displaced": st.column_config.NumberColumn("DSPL", format="%d"),
@@ -1087,14 +1097,14 @@ if confirm:
                    """,
                    unsafe_allow_html=True
                )
-else:
-       st.error("Nessun dato disponibile per l'analisi. Assicurati di caricare i file necessari o di inserire i dati manualmente.")
+elif analyzed_data is None:
+    st.error("Nessun dato disponibile per l'analisi. Assicurati di caricare i file necessari o di inserire i dati manualmente.")
 
 st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Hotel Group Displacement Analyzer | v0.5.0 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
+       <p>Hotel Group Displacement Analyzer | v0.5.1 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}<br>
        Distributed under MIT License
        </p>
