@@ -13,8 +13,9 @@ import re
 import requests
 import json
 import os
+import xlsxwriter
 
-st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.0beta2", layout="wide")
+st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.1b2", layout="wide")
 
 COLOR_PALETTE = {
     "primary": "#D8C0B7",
@@ -33,12 +34,29 @@ def load_changelog():
     except FileNotFoundError:
         return """# Changelog Hotel Group Displacement Analyzer
 
-## v0.9.0beta2 (Attuale)
-- Migliorata l'interfaccia utente con tabelle a colori differenziate
-- Corretto il bug nell'identificazione dei file Excel
-- Aggiunta visualizzazione del changelog al primo avvio
-- Corretta la visualizzazione delle tabelle di inserimento dati
-- Migliorato il processo di autenticazione
+## v0.9.1b2 (Attuale)
+- **Miglioramento Ragionamento Esteso**: Aggiunti suggerimenti di ADR intelligenti
+  - Analisi con ADR media tra anno corrente e precedente per richieste nello stesso anno
+  - Suggerimento automatico di incremento per l'anno successivo (3-7% in base all'occupazione)
+  - Visualizzazione migliorata dei risultati degli scenari
+- **Miglioramenti UX**: Etichette più chiare per gli scenari di ADR
+
+## v0.9.1 (Precedente)
+- **Correzione formula FCST IND**: Ora calcolata come LY IND - OTB IND
+- **Nuova funzionalità**: Esportazione report in formato Excel formattato
+- **Correzione display ADR**: Migliorata coerenza nei calcoli del valore totale gruppo
+- **Miglioramento UI**: Corretti problemi di visualizzazione tabelle
+- **Correzione bug**: Risolti problemi nell'importazione di file Excel
+- **Modifiche funzionali**: L'analisi ora considera sempre tutte le camere del gruppo
+- **Miglioria UX**: Implementato changelog al primo avvio
+
+## v0.9.0beta2
+- **Miglioramenti UI**: Tabelle con bordi colorati differenziati per anno corrente (verde) e anno precedente (arancione)
+- **Correzioni bug**: Risolto problema di identificazione dei file Excel durante l'import
+- **Nuova funzionalità**: Visualizzazione automatica del changelog al primo avvio
+- **Correzioni UI**: Migliorata visualizzazione delle tabelle di inserimento dati manuale
+- **Stabilità**: Migliorato il processo di autenticazione e gestione sessione
+- **Integrazioni**: Supporto per changelog esterno in formato markdown
 
 ## v0.9.0beta1
 - **Nuova funzionalità**: Ragionamento Esteso per analisi avanzata
@@ -86,7 +104,7 @@ def authenticate():
         except:
             st.error("Impossibile caricare il logo")
             
-        st.markdown("<p style='text-align: center;'>v0.9.0beta2</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center;'>v0.9.1b2</p>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center;'>Accedi per continuare</p>", unsafe_allow_html=True)
     
     try:
@@ -122,14 +140,13 @@ if not authenticate():
     st.stop()
 
 if 'has_seen_changelog' not in st.session_state:
-    st.markdown("## 🆕 Novità in Hotel Group Displacement Analyzer")
-    st.markdown(load_changelog())
-    
-    if st.button("Ho capito", type="primary"):
-        st.session_state['has_seen_changelog'] = True
-        st.rerun()
-    
-    st.stop()
+    with st.expander("🆕 Novità in Hotel Groups Displacement Analyzer v0.9.1b2", expanded=True):
+        changelog_content = load_changelog()
+        st.markdown(changelog_content)
+        
+        if st.button("Ho capito", type="primary"):
+            st.session_state['has_seen_changelog'] = True
+            st.rerun()
 
 st.sidebar.info(f"Accesso effettuato come: {st.session_state['username']}")
 if st.sidebar.button("Logout"):
@@ -202,6 +219,22 @@ st.markdown(f"""
         font-weight: bold;
         margin-bottom: 10px;
     }}
+    
+    .download-button {{
+        display: inline-block;
+        padding: 0.5em 1em;
+        background-color: #4CAF50;
+        color: white;
+        text-align: center;
+        text-decoration: none;
+        font-size: 16px;
+        margin: 4px 2px;
+        cursor: pointer;
+        border-radius: 4px;
+    }}
+    .download-button:hover {{
+        background-color: #45a049;
+    }}
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 """, unsafe_allow_html=True)
@@ -230,7 +263,218 @@ def get_csv_download_link(df, filename, text):
     href = f'<a href="data:file/csv;base64,{b64}" download="{filename}.csv">{text}</a>'
     return href
 
-def generate_auth_email(group_name, total_revenue, dates, rooms, adr):
+def generate_excel_report(result_df, metrics, group_info, hotel_info):
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+    
+    title_format = workbook.add_format({
+        'bold': True,
+        'font_size': 16,
+        'align': 'center',
+        'valign': 'vcenter',
+        'bg_color': COLOR_PALETTE["background"],
+        'font_color': COLOR_PALETTE["text"],
+        'border': 1
+    })
+    
+    header_format = workbook.add_format({
+        'bold': True,
+        'font_size': 12,
+        'align': 'center',
+        'valign': 'vcenter',
+        'bg_color': COLOR_PALETTE["primary"],
+        'font_color': 'white',
+        'border': 1
+    })
+    
+    cell_format = workbook.add_format({
+        'align': 'center',
+        'valign': 'vcenter',
+        'border': 1
+    })
+    
+    number_format = workbook.add_format({
+        'align': 'center',
+        'valign': 'vcenter',
+        'border': 1,
+        'num_format': '#,##0'
+    })
+    
+    currency_format = workbook.add_format({
+        'align': 'center',
+        'valign': 'vcenter',
+        'border': 1,
+        'num_format': '€#,##0.00'
+    })
+    
+    percentage_format = workbook.add_format({
+        'align': 'center',
+        'valign': 'vcenter',
+        'border': 1,
+        'num_format': '0.0%'
+    })
+    
+    date_format = workbook.add_format({
+        'align': 'center',
+        'valign': 'vcenter',
+        'border': 1,
+        'num_format': 'dd/mm/yyyy'
+    })
+    
+    section_format = workbook.add_format({
+        'bold': True,
+        'font_size': 14,
+        'align': 'left',
+        'valign': 'vcenter',
+        'bg_color': COLOR_PALETTE["secondary"],
+        'font_color': 'white',
+        'border': 1
+    })
+    
+    result_positive = workbook.add_format({
+        'bold': True,
+        'font_size': 14,
+        'align': 'center',
+        'valign': 'vcenter',
+        'bg_color': COLOR_PALETTE["positive"],
+        'font_color': 'white',
+        'border': 1
+    })
+    
+    result_negative = workbook.add_format({
+        'bold': True,
+        'font_size': 14,
+        'align': 'center',
+        'valign': 'vcenter',
+        'bg_color': COLOR_PALETTE["negative"],
+        'font_color': 'white',
+        'border': 1
+    })
+    
+    summary_sheet = workbook.add_worksheet('Riepilogo')
+    summary_sheet.set_column('A:A', 30)
+    summary_sheet.set_column('B:B', 30)
+    summary_sheet.set_column('C:C', 20)
+    summary_sheet.set_column('D:D', 20)
+    
+    summary_sheet.merge_range('A1:D1', 'RIEPILOGO ANALISI DISPLACEMENT', title_format)
+    
+    summary_sheet.merge_range('A3:D3', 'DATI HOTEL', section_format)
+    summary_sheet.write('A4', 'Hotel', cell_format)
+    summary_sheet.write('B4', hotel_info['name'], cell_format)
+    summary_sheet.write('A5', 'Capacità camere', cell_format)
+    summary_sheet.write('B5', hotel_info['capacity'], number_format)
+    summary_sheet.write('A6', 'Aliquota IVA', cell_format)
+    summary_sheet.write('B6', hotel_info['iva_rate'], percentage_format)
+    
+    summary_sheet.merge_range('A8:D8', 'DATI GRUPPO', section_format)
+    summary_sheet.write('A9', 'Nome gruppo', cell_format)
+    summary_sheet.write('B9', group_info['name'], cell_format)
+    summary_sheet.write('A10', 'Data arrivo', cell_format)
+    summary_sheet.write('B10', group_info['arrival_date'], date_format)
+    summary_sheet.write('A11', 'Data partenza', cell_format)
+    summary_sheet.write('B11', group_info['departure_date'], date_format)
+    summary_sheet.write('A12', 'Numero camere', cell_format)
+    summary_sheet.write('B12', group_info['num_rooms'], number_format)
+    summary_sheet.write('A13', 'ADR lordo', cell_format)
+    summary_sheet.write('B13', group_info['adr_lordo'], currency_format)
+    summary_sheet.write('A14', 'ADR netto', cell_format)
+    summary_sheet.write('B14', group_info['adr_netto'], currency_format)
+    summary_sheet.write('A15', 'Revenue ancillare', cell_format)
+    summary_sheet.write('B15', group_info['ancillary_revenue'], currency_format)
+    
+    summary_sheet.merge_range('A17:D17', 'RISULTATI ANALISI', section_format)
+    summary_sheet.write('A18', 'Camere richieste', cell_format)
+    summary_sheet.write('B18', metrics['total_group_rooms'], number_format)
+    summary_sheet.write('A19', 'Camere accettate', cell_format)
+    summary_sheet.write('B19', metrics['accepted_rooms'], number_format)
+    summary_sheet.write('A20', 'Camere displaced', cell_format)
+    summary_sheet.write('B20', metrics['displaced_rooms'], number_format)
+    summary_sheet.write('A21', 'Revenue camere gruppo', cell_format)
+    summary_sheet.write('B21', metrics['group_room_revenue'], currency_format)
+    summary_sheet.write('A22', 'Revenue ancillare', cell_format)
+    summary_sheet.write('B22', metrics['group_ancillary'], currency_format)
+    summary_sheet.write('A23', 'Revenue displaced', cell_format)
+    summary_sheet.write('B23', metrics['revenue_displaced'], currency_format)
+    summary_sheet.write('A24', 'Impatto totale', cell_format)
+    summary_sheet.write('B24', metrics['total_impact'], currency_format)
+    summary_sheet.write('A25', 'Valore totale lordo', cell_format)
+    summary_sheet.write('B25', metrics['total_lordo'], currency_format)
+    
+    decision_text = "ACCETTA GRUPPO" if metrics['should_accept'] else "DECLINA GRUPPO"
+    decision_format = result_positive if metrics['should_accept'] else result_negative
+    summary_sheet.merge_range('A27:D27', decision_text, decision_format)
+    
+    if metrics['needs_authorization']:
+        summary_sheet.merge_range('A29:D29', 'ATTENZIONE: RICHIEDE AUTORIZZAZIONE (>€35.000)', result_negative)
+    
+    summary_sheet.merge_range('A31:D31', f'Report generato il {datetime.now().strftime("%d/%m/%Y %H:%M")} da {st.session_state["username"]}', cell_format)
+    
+    data_sheet = workbook.add_worksheet('Dati Dettagliati')
+    
+    columns = ['data', 'giorno', 'finale_rn', 'camere_gruppo', 'camere_disponibili', 
+              'camere_displaced', 'adr_gruppo_netto', 'finale_adr', 
+              'revenue_camere_gruppo_effettivo', 'revenue_displaced', 'impatto_revenue_totale']
+    
+    headers = ['Data', 'Giorno', 'FCST OTB', 'REQ', 'Disponibili', 
+              'DSPL', 'ADR Netto', 'ADR Attuale', 
+              'REV REQ', 'REV DSPL', 'DIFF']
+    
+    for i, col in enumerate(columns):
+        data_sheet.set_column(i, i, 15)
+    
+    for i, header in enumerate(headers):
+        data_sheet.write(0, i, header, header_format)
+    
+    for i, row in result_df.reset_index(drop=True).iterrows():
+        data_sheet.write(i+1, 0, row['data'], date_format)
+        data_sheet.write(i+1, 1, row['giorno'], cell_format)
+        data_sheet.write(i+1, 2, row['finale_rn'], number_format)
+        data_sheet.write(i+1, 3, row['camere_gruppo'], number_format)
+        data_sheet.write(i+1, 4, row['camere_disponibili'], number_format)
+        data_sheet.write(i+1, 5, row['camere_displaced'], number_format)
+        data_sheet.write(i+1, 6, row['adr_gruppo_netto'], currency_format)
+        data_sheet.write(i+1, 7, row['finale_adr'], currency_format)
+        data_sheet.write(i+1, 8, row['revenue_camere_gruppo_effettivo'], currency_format)
+        data_sheet.write(i+1, 9, row['revenue_displaced'], currency_format)
+        data_sheet.write(i+1, 10, row['impatto_revenue_totale'], currency_format)
+    
+    forecast_sheet = workbook.add_worksheet('Forecast e OTB')
+    
+    forecast_cols = ['data', 'giorno', 'otb_ind_rn', 'ly_ind_rn', 'fcst_ind_rn', 
+                    'grp_otb_rn', 'grp_opz_rn', 'finale_rn']
+    
+    forecast_headers = ['Data', 'Giorno', 'OTB IND', 'LY IND', 'FCST IND', 
+                        'GRP OTB', 'GRP OPZ', 'TOTALE']
+    
+    for i, col in enumerate(forecast_cols):
+        forecast_sheet.set_column(i, i, 15)
+    
+    for i, header in enumerate(forecast_headers):
+        forecast_sheet.write(0, i, header, header_format)
+    
+    for i, row in result_df.reset_index(drop=True).iterrows():
+        forecast_sheet.write(i+1, 0, row['data'], date_format)
+        forecast_sheet.write(i+1, 1, row['giorno'], cell_format)
+        forecast_sheet.write(i+1, 2, row['otb_ind_rn'], number_format)
+        forecast_sheet.write(i+1, 3, row['ly_ind_rn'], number_format)
+        forecast_sheet.write(i+1, 4, row['fcst_ind_rn'], number_format)
+        forecast_sheet.write(i+1, 5, row['grp_otb_rn'], number_format)
+        forecast_sheet.write(i+1, 6, row['grp_opz_rn'], number_format)
+        forecast_sheet.write(i+1, 7, row['finale_rn'], number_format)
+    
+    workbook.close()
+    
+    output.seek(0)
+    return output.getvalue()
+
+def get_excel_download_link(result_df, metrics, group_info, hotel_info, filename):
+    excel_data = generate_excel_report(result_df, metrics, group_info, hotel_info)
+    b64 = base64.b64encode(excel_data).decode()
+    
+    return f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}.xlsx" class="download-button">📥 Scarica Report Excel</a>'
+
+def generate_auth_email(group_name, total_revenue, dates, rooms, adr, nights):
     email_template = f"""
     Oggetto: Richiesta autorizzazione gruppo {group_name} - Valore €{total_revenue:,.2f}
     
@@ -241,8 +485,9 @@ def generate_auth_email(group_name, total_revenue, dates, rooms, adr):
     Dettagli della richiesta:
     - Date soggiorno: dal {dates[0].strftime('%d/%m/%Y')} al {dates[-1].strftime('%d/%m/%Y')}
     - Numero camere: {rooms} ROH
+    - Numero notti: {nights}
     - ADR: €{adr:.2f}
-    - Valore totale: €{total_revenue:,.2f}
+    - Valore totale: €{total_revenue:,.2f} ({rooms} camere × €{adr:.2f} × {nights} notti + eventuali ancillari)
     
     Analisi displacement allegata.
     
@@ -359,19 +604,37 @@ def process_excel_import(uploaded_files):
             df = pd.read_excel(uploaded_file)
             file_type, year, month_year = identify_excel_file_type(df)
             
-            data_rows = df[df.iloc[:, 0].str.contains('Giorno', na=False)].index
-            if len(data_rows) == 0:
-                st.error(f"Formato del file {uploaded_file.name} non riconosciuto: nessuna colonna 'Giorno' trovata")
+            date_col_candidates = ['Giorno', 'Data', 'Date', 'day', 'date']
+            data_rows = None
+            
+            for candidate in date_col_candidates:
+                mask = df.iloc[:, 0].astype(str).str.contains(candidate, case=False, na=False)
+                if mask.any():
+                    data_rows = df[mask].index[0]
+                    break
+            
+            if data_rows is None:
+                st.error(f"Formato del file {uploaded_file.name} non riconosciuto: nessuna colonna data trovata")
                 continue
                 
-            data_rows = data_rows[0]
             headers = df.iloc[data_rows].values.tolist()
             
             data_df = df.iloc[data_rows+1:].reset_index(drop=True)
-            data_df.columns = headers[:13]
+            data_df.columns = headers[:len(data_df.columns)]
+            
+            date_column = None
+            for col in data_df.columns:
+                if isinstance(col, str) and any(candidate.lower() in col.lower() for candidate in date_col_candidates):
+                    date_column = col
+                    break
+            
+            if date_column is None:
+                date_column = data_df.columns[0]
+            
+            data_df = data_df.rename(columns={date_column: 'Giorno'})
             
             data_df = data_df[~data_df['Giorno'].isna()]
-            data_df = data_df[~data_df['Giorno'].str.contains('Filtri applicati:', na=False)]
+            data_df = data_df[~data_df['Giorno'].astype(str).str.contains('Filtri applicati:', na=False)]
             
             numeric_cols = ['Room nights', 'Bed nights', 'ADR Cam', 'ADR Bed', 'Room Revenue', 'RevPar']
             for col in numeric_cols:
@@ -381,14 +644,14 @@ def process_excel_import(uploaded_files):
             data_df['Giorno'] = pd.to_datetime(data_df['Giorno'], errors='coerce')
             
             if file_type == "IDV":
-                if str(current_year) in year or str(current_year) in str(month_year):
+                if str(current_year) in str(year) or (month_year and str(current_year) in str(month_year)):
                     idv_cy_data = data_df
                     st.success(f"File IDV Anno Corrente riconosciuto: {uploaded_file.name}")
                 else:
                     idv_ly_data = data_df
                     st.success(f"File IDV Anno Precedente riconosciuto: {uploaded_file.name}")
             elif file_type == "GRP":
-                if data_df['Room nights'].sum() > 0:
+                if 'Room nights' in data_df.columns and data_df['Room nights'].sum() > 0:
                     grp_otb_data = data_df
                     st.success(f"File Gruppi Confermati riconosciuto: {uploaded_file.name}")
                 else:
@@ -507,7 +770,7 @@ def process_imported_data(idv_cy_data, idv_ly_data, grp_otb_data, grp_opz_data, 
         
         result_df = result_df.fillna(0)
         
-        result_df['fcst_ind_rn'] = result_df['ly_ind_rn'] * 1.1
+        result_df['fcst_ind_rn'] = result_df['ly_ind_rn'] - result_df['otb_ind_rn']
         result_df['fcst_ind_adr'] = result_df['otb_ind_adr']
         
         result_df['otb_ind_rev'] = result_df['otb_ind_rn'] * result_df['otb_ind_adr']
@@ -516,10 +779,10 @@ def process_imported_data(idv_cy_data, idv_ly_data, grp_otb_data, grp_opz_data, 
         result_df['grp_opz_rev'] = result_df['grp_opz_rn'] * result_df['grp_opz_adr']
         result_df['fcst_ind_rev'] = result_df['fcst_ind_rn'] * result_df['fcst_ind_adr']
         
-        result_df['finale_rn'] = result_df['fcst_ind_rn'] + result_df['grp_otb_rn']
+        result_df['finale_rn'] = result_df['fcst_ind_rn'] + result_df['otb_ind_rn'] + result_df['grp_otb_rn']
         result_df['finale_opz_rn'] = result_df['finale_rn'] + result_df['grp_opz_rn']
         
-        result_df['finale_rev'] = result_df['fcst_ind_rev'] + result_df['grp_otb_rev']
+        result_df['finale_rev'] = result_df['otb_ind_rev'] + result_df['fcst_ind_rev'] + result_df['grp_otb_rev']
         result_df['finale_adr'] = np.where(result_df['finale_rn'] > 0,
                                        result_df['finale_rev'] / result_df['finale_rn'],
                                        0)
@@ -638,7 +901,7 @@ def process_uploaded_files(idv_cy_file, idv_ly_file, grp_otb_file, grp_opz_file,
         
         result_df = result_df.fillna(0)
         
-        result_df['fcst_ind_rn'] = result_df['ly_ind_rn'] * 1.1
+        result_df['fcst_ind_rn'] = result_df['ly_ind_rn'] - result_df['otb_ind_rn']
         result_df['fcst_ind_adr'] = result_df['otb_ind_adr']
         
         result_df['otb_ind_rev'] = result_df['otb_ind_rn'] * result_df['otb_ind_adr']
@@ -647,10 +910,10 @@ def process_uploaded_files(idv_cy_file, idv_ly_file, grp_otb_file, grp_opz_file,
         result_df['grp_opz_rev'] = result_df['grp_opz_rn'] * result_df['grp_opz_adr']
         result_df['fcst_ind_rev'] = result_df['fcst_ind_rn'] * result_df['fcst_ind_adr']
         
-        result_df['finale_rn'] = result_df['fcst_ind_rn'] + result_df['grp_otb_rn']
+        result_df['finale_rn'] = result_df['fcst_ind_rn'] + result_df['otb_ind_rn'] + result_df['grp_otb_rn']
         result_df['finale_opz_rn'] = result_df['finale_rn'] + result_df['grp_opz_rn']
         
-        result_df['finale_rev'] = result_df['fcst_ind_rev'] + result_df['grp_otb_rev']
+        result_df['finale_rev'] = result_df['otb_ind_rev'] + result_df['fcst_ind_rev'] + result_df['grp_otb_rev']
         result_df['finale_adr'] = np.where(result_df['finale_rn'] > 0,
                                        result_df['finale_rev'] / result_df['finale_rn'],
                                        0)
@@ -710,7 +973,7 @@ class ExcelCompatibleDisplacementAnalyzer:
         
         result = pd.merge(self.data, self.group_request, on='data', how='right')
         
-        result['finale_rn'] = result['fcst_ind_rn'] + result['grp_otb_rn']
+        result['finale_rn'] = result['fcst_ind_rn'] + result['otb_ind_rn'] + result['grp_otb_rn']
         result['finale_opz_rn'] = result['finale_rn']
         
         result['camere_disponibili'] = self.hotel_capacity - result['finale_rn']
@@ -720,14 +983,13 @@ class ExcelCompatibleDisplacementAnalyzer:
             (result['finale_rn'] + result['camere_gruppo']) - self.hotel_capacity
         )
         
-        result['camere_gruppo_accettate'] = result['camere_gruppo'] - result['camere_displaced']
+        result['camere_gruppo_accettate'] = result['camere_gruppo']
         
         result['revenue_displaced'] = result['camere_displaced'] * result['finale_adr']
         
-        result['revenue_camere_gruppo_effettivo'] = result['camere_gruppo_accettate'] * result['adr_gruppo_netto']
+        result['revenue_camere_gruppo_effettivo'] = result['camere_gruppo'] * result['adr_gruppo_netto']
         
         result['impatto_revenue_camera'] = result['revenue_camere_gruppo_effettivo'] - result['revenue_displaced']
-        
         result['impatto_revenue_totale'] = result['impatto_revenue_camera'] + result['revenue_ancillare_gruppo']
         
         result['occupazione_attuale'] = result['finale_rn'] / self.hotel_capacity * 100
@@ -752,6 +1014,7 @@ class ExcelCompatibleDisplacementAnalyzer:
     
     def get_summary_metrics(self, analysis_df):
         total_displaced_revenue = analysis_df['revenue_displaced'].sum()
+        total_group_rooms = analysis_df['camere_gruppo'].sum()
         total_group_room_revenue = analysis_df['revenue_camere_gruppo_effettivo'].sum()
         total_group_ancillary = analysis_df['revenue_ancillare_gruppo'].sum()
         total_impact = analysis_df['impatto_revenue_totale'].sum()
@@ -767,17 +1030,13 @@ class ExcelCompatibleDisplacementAnalyzer:
         
         extra_vs_ly = adr_netto - avg_adr_ly
         
-        total_group_rooms = analysis_df['camere_gruppo'].sum()
-        accepted_rooms = analysis_df['camere_gruppo_accettate'].sum()
+        accepted_rooms = total_group_rooms
         displaced_rooms = analysis_df['camere_displaced'].sum()
-        room_profit = (adr_netto * accepted_rooms) - total_displaced_revenue
-        
-        total_rev_profit = room_profit + total_group_ancillary
         
         avg_occ_current = analysis_df['occupazione_attuale'].mean()
         avg_occ_with_group = analysis_df['occupazione_con_gruppo'].mean()
         
-        should_accept = total_rev_profit > 0
+        should_accept = total_impact > 0
         
         return {
             'revenue_displaced': total_displaced_revenue,
@@ -797,9 +1056,9 @@ class ExcelCompatibleDisplacementAnalyzer:
             'displaced_rooms': displaced_rooms,
             'avg_occ_current': avg_occ_current,
             'avg_occ_with_group': avg_occ_with_group,
-            'room_profit': room_profit,
-            'total_rev_profit': total_rev_profit,
-            'profit_per_room': room_profit / accepted_rooms if accepted_rooms > 0 else 0,
+            'room_profit': total_group_room_revenue - total_displaced_revenue,
+            'total_rev_profit': total_impact,
+            'profit_per_room': (total_group_room_revenue - total_displaced_revenue) / accepted_rooms if accepted_rooms > 0 else 0,
         }
     
     def create_visualizations(self, analysis_df, metrics, events_df=None):
@@ -932,7 +1191,7 @@ class ExcelCompatibleDisplacementAnalyzer:
         return fig, fig_summary
 
 
-st.title("Hotel Group Displacement Analyzer v0.9.0beta2")
+st.title("Hotel Group Displacement Analyzer v0.9.1b2")
 st.markdown("*Strumento di analisi richieste preventivo gruppi*")
 
 with st.sidebar:
@@ -1115,7 +1374,8 @@ if data_source == "Import file Excel":
                     "grp_otb_rn": st.column_config.NumberColumn("GRP OTB", format="%d"),
                     "grp_opz_rn": st.column_config.NumberColumn("GRP OPZ", format="%d"),
                     "finale_rn": st.column_config.NumberColumn("TOTALE", format="%d")
-                }
+                },
+                use_container_width=True
             )
         
         with tab2:
@@ -1130,7 +1390,8 @@ if data_source == "Import file Excel":
                     "grp_otb_adr": st.column_config.NumberColumn("GRP OTB", format="€%.2f"),
                     "grp_opz_adr": st.column_config.NumberColumn("GRP OPZ", format="€%.2f"),
                     "finale_adr": st.column_config.NumberColumn("FINALE", format="€%.2f")
-                }
+                },
+                use_container_width=True
             )
         
         with tab3:
@@ -1145,7 +1406,8 @@ if data_source == "Import file Excel":
                     "grp_otb_rev": st.column_config.NumberColumn("GRP OTB", format="€%.2f"),
                     "grp_opz_rev": st.column_config.NumberColumn("GRP OPZ", format="€%.2f"),
                     "finale_rev": st.column_config.NumberColumn("FINALE", format="€%.2f")
-                }
+                },
+                use_container_width=True
             )
     
     with st.expander("Mappatura campi (avanzato)", expanded=False):
@@ -1314,7 +1576,7 @@ elif data_source == "Inserimento manuale":
             hide_index=True,
             key="rn_ly",
             column_config={
-                "data_ly": st.column_config.DateColumn("Data LY", format="DD/MM/YYYY"),
+                "data_ly": st.column_config.DatetimeColumn("Data LY", format="DD/MM/YYYY"),
                 "giorno_ly": "Giorno LY",
                 "ly_ind_rn": st.column_config.NumberColumn("LY IND", min_value=0, format="%d")
             },
@@ -1354,7 +1616,7 @@ elif data_source == "Inserimento manuale":
             hide_index=True,
             key="adr_ly",
             column_config={
-                "data_ly": st.column_config.DateColumn("Data LY", format="DD/MM/YYYY"),
+                "data_ly": st.column_config.DatetimeColumn("Data LY", format="DD/MM/YYYY"),
                 "giorno_ly": "Giorno LY",
                 "ly_ind_adr": st.column_config.NumberColumn("LY IND", min_value=0, format="€%.2f")
             },
@@ -1386,27 +1648,8 @@ elif data_source == "Inserimento manuale":
         with st.container(border=True):
             if enable_wizard:
                 st.markdown("👇 **Imposta i parametri per il forecast**")
-            col1, col2 = st.columns(2)
             
-            with col1:
-                forecast_method = st.selectbox("Metodo di Forecast", 
-                                             ["Basato su LY", "Percentuale su OTB", "Valore assoluto"],
-                                             index=["Basato su LY", "Percentuale su OTB", "Valore assoluto"].index(st.session_state['forecast_method']))
-                st.session_state['forecast_method'] = forecast_method
-            
-            with col2:
-                if forecast_method == "Basato su LY":
-                    pickup_factor = st.slider("Moltiplicatore LY", 0.5, 2.0, st.session_state['pickup_factor'], 0.1, 
-                                          help="Moltiplica i dati LY per questo fattore")
-                    st.session_state['pickup_factor'] = pickup_factor
-                elif forecast_method == "Percentuale su OTB":
-                    pickup_percentage = st.slider("Pickup %", 0, 100, st.session_state['pickup_percentage'], 5, 
-                                              help="Aggiunge questa percentuale all'OTB attuale")
-                    st.session_state['pickup_percentage'] = pickup_percentage
-                else:
-                    pickup_value = st.number_input("Camere da aggiungere", 0, 100, st.session_state['pickup_value'],
-                                                help="Aggiunge questo numero di camere all'OTB attuale")
-                    st.session_state['pickup_value'] = pickup_value
+            st.info("Il forecast è calcolato come LY IND - OTB IND (pickup rimanente dall'anno precedente)")
         
         if enable_wizard:
             col1, col2 = st.columns([1, 1])
@@ -1429,17 +1672,11 @@ elif data_source == "Inserimento manuale":
         final_data = pd.merge(final_data, edited_adr_ly[['ly_ind_adr']], 
                            left_index=True, right_index=True)
        
-        if st.session_state['forecast_method'] == "Basato su LY":
-            final_data['fcst_ind_rn'] = np.ceil(final_data['ly_ind_rn'] * st.session_state['pickup_factor'])
-        elif st.session_state['forecast_method'] == "Percentuale su OTB":
-            final_data['fcst_ind_rn'] = np.ceil(final_data['otb_ind_rn'] * (1 + st.session_state['pickup_percentage']/100))
-        else:
-            final_data['fcst_ind_rn'] = final_data['otb_ind_rn'] + st.session_state['pickup_value']
-       
+        final_data['fcst_ind_rn'] = final_data['ly_ind_rn'] - final_data['otb_ind_rn']
         final_data['fcst_ind_adr'] = final_data['otb_ind_adr']
        
-        final_data['finale_rn'] = final_data['fcst_ind_rn'] + final_data['grp_otb_rn']
-        final_data['finale_opz_rn'] = final_data['fcst_ind_rn'] + final_data['grp_otb_rn'] + final_data['grp_opz_rn']
+        final_data['finale_rn'] = final_data['fcst_ind_rn'] + final_data['otb_ind_rn'] + final_data['grp_otb_rn']
+        final_data['finale_opz_rn'] = final_data['finale_rn'] + final_data['grp_opz_rn']
        
         final_data['otb_ind_rev'] = final_data['otb_ind_rn'] * final_data['otb_ind_adr']
         final_data['ly_ind_rev'] = final_data['ly_ind_rn'] * final_data['ly_ind_adr']
@@ -1447,7 +1684,7 @@ elif data_source == "Inserimento manuale":
         final_data['grp_opz_rev'] = final_data['grp_opz_rn'] * final_data['grp_opz_adr']
         final_data['fcst_ind_rev'] = final_data['fcst_ind_rn'] * final_data['fcst_ind_adr']
        
-        final_data['finale_rev'] = final_data['fcst_ind_rev'] + final_data['grp_otb_rev']
+        final_data['finale_rev'] = final_data['otb_ind_rev'] + final_data['fcst_ind_rev'] + final_data['grp_otb_rev']
         final_data['finale_adr'] = np.where(final_data['finale_rn'] > 0,
                                         final_data['finale_rev'] / final_data['finale_rn'],
                                         0)
@@ -1468,7 +1705,8 @@ elif data_source == "Inserimento manuale":
                         "grp_otb_rn": st.column_config.NumberColumn("GRP OTB", format="%d"),
                         "grp_opz_rn": st.column_config.NumberColumn("GRP OPZ", format="%d"),
                         "finale_rn": st.column_config.NumberColumn("TOTALE", format="%d")
-                    }
+                    },
+                    use_container_width=True
                 )
            
             with tab2:
@@ -1483,7 +1721,8 @@ elif data_source == "Inserimento manuale":
                         "grp_otb_adr": st.column_config.NumberColumn("GRP OTB", format="€%.2f"),
                         "grp_opz_adr": st.column_config.NumberColumn("GRP OPZ", format="€%.2f"),
                         "finale_adr": st.column_config.NumberColumn("FINALE", format="€%.2f")
-                    }
+                    },
+                    use_container_width=True
                 )
            
             with tab3:
@@ -1498,7 +1737,8 @@ elif data_source == "Inserimento manuale":
                         "grp_otb_rev": st.column_config.NumberColumn("GRP OTB", format="€%.2f"),
                         "grp_opz_rev": st.column_config.NumberColumn("GRP OPZ", format="€%.2f"),
                         "finale_rev": st.column_config.NumberColumn("FINALE", format="€%.2f")
-                    }
+                    },
+                    use_container_width=True
                 )
        
         analyzed_data = final_data
@@ -1710,6 +1950,23 @@ else:
                 adr_variations = [-10, -5, 0, 5, 10]
                 scenario_results = []
                 
+                current_year = datetime.now().year
+                is_future_year = group_arrival.year > current_year
+                
+                avg_adr_cy_ly = (metrics['avg_adr_cy'] + metrics['avg_adr_ly']) / 2
+                avg_adr_label = "Media CY/LY"
+                
+                avg_occ = metrics['avg_occ_current']
+                if avg_occ < 60:
+                    future_increment = 0.03
+                elif avg_occ < 80:
+                    future_increment = 0.05
+                else:
+                    future_increment = 0.07
+                
+                future_adr = metrics['avg_adr_cy'] * (1 + future_increment)
+                future_adr_label = f"+{future_increment*100:.0f}% (Anno Successivo)"
+                
                 for variation in adr_variations:
                     new_adr = adr_lordo * (1 + variation/100)
                     new_adr_netto = new_adr / (1 + iva_rate)
@@ -1735,8 +1992,79 @@ else:
                     
                     scenario_results.append({
                         "variation": variation,
+                        "variation_label": f"{variation:+d}%",
                         "adr_lordo": new_adr,
                         "adr_netto": new_adr_netto,
+                        "total_impact": metrics_scenario['total_impact'],
+                        "room_profit": metrics_scenario['room_profit'],
+                        "total_rev_profit": metrics_scenario['total_rev_profit'],
+                        "displaced_rooms": metrics_scenario['displaced_rooms'],
+                        "should_accept": metrics_scenario['should_accept'],
+                        "total_lordo": metrics_scenario['total_lordo']
+                    })
+                
+                if not is_future_year:
+                    variation_perc = ((avg_adr_cy_ly / adr_netto) - 1) * 100
+                    
+                    analyzer_scenario = ExcelCompatibleDisplacementAnalyzer(hotel_capacity=hotel_capacity, iva_rate=iva_rate)
+                    analyzer_scenario.set_data(analyzed_data)
+                    analyzer_scenario.set_decision_parameters(decision_parameters)
+                    analyzer_scenario.set_group_request(
+                        start_date=group_arrival,
+                        end_date=group_departure,
+                        num_rooms=num_rooms,
+                        adr_lordo=avg_adr_cy_ly * (1 + iva_rate),
+                        fb_revenue=fb_revenue,
+                        meeting_revenue=meeting_revenue,
+                        other_revenue=other_revenue
+                    )
+                    
+                    result_scenario = analyzer_scenario.analyze()
+                    if dates_for_analysis and len(dates_for_analysis) < len(date_options):
+                        result_scenario = result_scenario[result_scenario['data'].isin(dates_for_analysis)]
+                    
+                    metrics_scenario = analyzer_scenario.get_summary_metrics(result_scenario)
+                    
+                    scenario_results.append({
+                        "variation": variation_perc,
+                        "variation_label": avg_adr_label,
+                        "adr_lordo": avg_adr_cy_ly * (1 + iva_rate),
+                        "adr_netto": avg_adr_cy_ly,
+                        "total_impact": metrics_scenario['total_impact'],
+                        "room_profit": metrics_scenario['room_profit'],
+                        "total_rev_profit": metrics_scenario['total_rev_profit'],
+                        "displaced_rooms": metrics_scenario['displaced_rooms'],
+                        "should_accept": metrics_scenario['should_accept'],
+                        "total_lordo": metrics_scenario['total_lordo']
+                    })
+                
+                if is_future_year:
+                    variation_perc = ((future_adr / adr_netto) - 1) * 100
+                    
+                    analyzer_scenario = ExcelCompatibleDisplacementAnalyzer(hotel_capacity=hotel_capacity, iva_rate=iva_rate)
+                    analyzer_scenario.set_data(analyzed_data)
+                    analyzer_scenario.set_decision_parameters(decision_parameters)
+                    analyzer_scenario.set_group_request(
+                        start_date=group_arrival,
+                        end_date=group_departure,
+                        num_rooms=num_rooms,
+                        adr_lordo=future_adr * (1 + iva_rate),
+                        fb_revenue=fb_revenue,
+                        meeting_revenue=meeting_revenue,
+                        other_revenue=other_revenue
+                    )
+                    
+                    result_scenario = analyzer_scenario.analyze()
+                    if dates_for_analysis and len(dates_for_analysis) < len(date_options):
+                        result_scenario = result_scenario[result_scenario['data'].isin(dates_for_analysis)]
+                    
+                    metrics_scenario = analyzer_scenario.get_summary_metrics(result_scenario)
+                    
+                    scenario_results.append({
+                        "variation": variation_perc,
+                        "variation_label": future_adr_label,
+                        "adr_lordo": future_adr * (1 + iva_rate),
+                        "adr_netto": future_adr,
                         "total_impact": metrics_scenario['total_impact'],
                         "room_profit": metrics_scenario['room_profit'],
                         "total_rev_profit": metrics_scenario['total_rev_profit'],
@@ -1810,7 +2138,8 @@ else:
             st.dataframe(
                 extended_analysis_results['scenarios_df'],
                 column_config={
-                    "variation": st.column_config.NumberColumn("Variazione %", format="%+d%%"),
+                    "variation_label": "Scenario",
+                    "variation": st.column_config.NumberColumn("Variazione %", format="%+.1f%%"),
                     "adr_lordo": st.column_config.NumberColumn("ADR Lordo", format="€%.2f"),
                     "adr_netto": st.column_config.NumberColumn("ADR Netto", format="€%.2f"),
                     "total_impact": st.column_config.NumberColumn("Impatto Rev", format="€%.2f"),
@@ -1818,20 +2147,23 @@ else:
                     "total_rev_profit": st.column_config.NumberColumn("Profitto Totale", format="€%.2f"),
                     "displaced_rooms": st.column_config.NumberColumn("Camere Displaced", format="%d"),
                     "should_accept": st.column_config.CheckboxColumn("Da Accettare")
-                }
+                },
+                use_container_width=True
             )
             
-            scenarios_df = extended_analysis_results['scenarios_df']
+            scenarios_df_sorted = extended_analysis_results['scenarios_df'].sort_values('variation')
+            
             fig_scenarios = px.line(
-                scenarios_df, 
-                x="variation", 
+                scenarios_df_sorted, 
+                x="variation_label", 
                 y=["total_rev_profit", "room_profit"],
                 markers=True,
                 labels={
-                    "variation": "Variazione ADR (%)",
+                    "variation_label": "Scenario ADR",
                     "value": "Profitto (€)",
                     "variable": "Tipo"
                 },
+                category_orders={"variation_label": scenarios_df_sorted["variation_label"].tolist()},
                 title="Impatto delle variazioni di ADR sul profitto",
                 color_discrete_map={
                     "total_rev_profit": COLOR_PALETTE["positive"],
@@ -1849,14 +2181,25 @@ else:
             st.plotly_chart(fig_scenarios, use_container_width=True)
             
             optimal_scenario = extended_analysis_results['optimal_scenario']
-            if optimal_scenario["variation"] != 0:
-                st.info(f"""
-                💡 **Suggerimento tariffario ottimale**: 
-                Un'ADR di €{optimal_scenario['adr_lordo']:.2f} ({optimal_scenario['variation']:+}%) 
-                genererebbe un profitto totale di €{optimal_scenario['total_rev_profit']:,.2f}, 
-                con un incremento di €{optimal_scenario['total_rev_profit'] - metrics['total_rev_profit']:,.2f} 
-                rispetto all'ADR proposta originalmente.
-                """)
+            if optimal_scenario["variation_label"] not in [f"{0:+d}%", "0%"]:
+                if "Anno Successivo" in optimal_scenario["variation_label"] or "Media CY/LY" in optimal_scenario["variation_label"]:
+                    st.info(f"""
+                    💡 **Suggerimento tariffario ottimale**: 
+                    L'ADR suggerita di €{optimal_scenario['adr_lordo']:.2f} ({optimal_scenario['variation_label']}) 
+                    genererebbe un profitto totale di €{optimal_scenario['total_rev_profit']:,.2f}, 
+                    con un incremento di €{optimal_scenario['total_rev_profit'] - metrics['total_rev_profit']:,.2f} 
+                    rispetto all'ADR proposta originalmente.
+                    
+                    Questa tariffa è calcolata {"sulla media degli anni corrente e precedente" if "Media" in optimal_scenario["variation_label"] else "considerando un incremento basato sull'occupazione per l'anno successivo"}.
+                    """)
+                else:
+                    st.info(f"""
+                    💡 **Suggerimento tariffario ottimale**: 
+                    Un'ADR di €{optimal_scenario['adr_lordo']:.2f} ({optimal_scenario['variation_label']}) 
+                    genererebbe un profitto totale di €{optimal_scenario['total_rev_profit']:,.2f}, 
+                    con un incremento di €{optimal_scenario['total_rev_profit'] - metrics['total_rev_profit']:,.2f} 
+                    rispetto all'ADR proposta originalmente.
+                    """)
             else:
                 st.success("✅ L'ADR proposta è già ottimale per massimizzare il profitto.")
             
@@ -1876,7 +2219,8 @@ else:
                             options=["Nessuna", "Bassa", "Media", "Alta"],
                             required=True
                         )
-                    }
+                    },
+                    use_container_width=True
                 )
                 
                 st.markdown("*La funzionalità di suggerimento date alternative sarà disponibile nei prossimi aggiornamenti.*")
@@ -1900,10 +2244,40 @@ else:
                    "revenue_camere_gruppo_effettivo": st.column_config.NumberColumn("REV REQ", format="€%.2f"),
                    "revenue_displaced": st.column_config.NumberColumn("REV DSPL", format="€%.2f"),
                    "impatto_revenue_totale": st.column_config.NumberColumn("DIFF", format="€%.2f")
-               }
+               },
+               use_container_width=True
            )
            
-        st.markdown(get_csv_download_link(result_df, f"displacement_{group_name}", "📥 Scarica dati completi (CSV)"), unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(get_csv_download_link(result_df, f"displacement_{group_name}", "📥 Scarica dati completi (CSV)"), unsafe_allow_html=True)
+        
+        with col2:
+            group_info = {
+                'name': group_name,
+                'arrival_date': group_arrival,
+                'departure_date': group_departure,
+                'num_rooms': num_rooms,
+                'adr_lordo': adr_lordo,
+                'adr_netto': adr_netto,
+                'ancillary_revenue': total_ancillary
+            }
+            
+            hotel_info = {
+                'name': f"Hotel (capacità: {hotel_capacity} camere)",
+                'capacity': hotel_capacity,
+                'iva_rate': iva_rate
+            }
+            
+            excel_download_link = get_excel_download_link(
+                result_df, 
+                metrics, 
+                group_info, 
+                hotel_info, 
+                f"Report_Displacement_{group_name}_{datetime.now().strftime('%Y%m%d')}"
+            )
+            
+            st.markdown(excel_download_link, unsafe_allow_html=True)
            
         st.header("Decisione Finale")
            
@@ -1927,12 +2301,15 @@ else:
                
             st.subheader("Email di Richiesta Autorizzazione")
                
+            nights = (group_departure - group_arrival).days
+            
             email_text = generate_auth_email(
                 group_name=group_name,
                 total_revenue=metrics['total_lordo'],
                 dates=result_df['data'].tolist(),
                 rooms=num_rooms,
-                adr=adr_lordo
+                adr=adr_lordo,
+                nights=nights
             )
                
             st.text_area("Email da inviare", email_text, height=300, key="email_text")
@@ -2012,7 +2389,8 @@ if enable_series and st.session_state.get('series_complete', False):
             "DSPL": st.column_config.NumberColumn("DSPL", format="€%.2f"),
             "Impatto": st.column_config.NumberColumn("Impatto", format="€%.2f"),
             "Totale Lordo": st.column_config.NumberColumn("Totale Lordo", format="€%.2f")
-        }
+        },
+        use_container_width=True
     )
     
     total_series_revenue = sum(item['total_lordo'] for item in st.session_state['series_data'])
@@ -2099,7 +2477,7 @@ st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Hotel Group Displacement Analyzer | v0.9.0beta2 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
+       <p>Hotel Group Displacement Analyzer | v0.9.1b2 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}<br>
        Distributed under MIT License
        </p>
