@@ -122,13 +122,14 @@ if not authenticate():
     st.stop()
 
 if 'has_seen_changelog' not in st.session_state:
-    with st.dialog("Novità in Hotel Group Displacement Analyzer"):
-        changelog_content = load_changelog()
-        st.markdown(changelog_content)
-        
-        if st.button("Ho capito", type="primary"):
-            st.session_state['has_seen_changelog'] = True
-            st.rerun()
+    st.markdown("## 🆕 Novità in Hotel Group Displacement Analyzer")
+    st.markdown(load_changelog())
+    
+    if st.button("Ho capito", type="primary"):
+        st.session_state['has_seen_changelog'] = True
+        st.rerun()
+    
+    st.stop()
 
 st.sidebar.info(f"Accesso effettuato come: {st.session_state['username']}")
 if st.sidebar.button("Logout"):
