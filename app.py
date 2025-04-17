@@ -15,7 +15,7 @@ import json
 import os
 import xlsxwriter
 
-st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.1b2", layout="wide")
+st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.2b2", layout="wide")
 
 COLOR_PALETTE = {
     "primary": "#D8C0B7",
@@ -34,12 +34,10 @@ def load_changelog():
     except FileNotFoundError:
         return """# Changelog Hotel Group Displacement Analyzer
 
-## v0.9.1b2 (Attuale)
-- **Miglioramento Ragionamento Esteso**: Aggiunti suggerimenti di ADR intelligenti
-  - Analisi con ADR media tra anno corrente e precedente per richieste nello stesso anno
-  - Suggerimento automatico di incremento per l'anno successivo (3-7% in base all'occupazione)
-  - Visualizzazione migliorata dei risultati degli scenari
-- **Miglioramenti UX**: Etichette più chiare per gli scenari di ADR
+## v0.9.2b2 (Attuale)
+- **Miglioramento Changelog**: Il changelog ora viene mostrato solo al primo accesso per ogni utente
+- **Miglioramento Forecast**: Ripristinate tutte le modalità di calcolo del forecast con "LY - OTB" come opzione predefinita
+- **Ottimizzazione**: Impostato il valore predefinito del moltiplicatore a 1.0
 
 ## v0.9.1 (Precedente)
 - **Correzione formula FCST IND**: Ora calcolata come LY IND - OTB IND
@@ -104,7 +102,7 @@ def authenticate():
         except:
             st.error("Impossibile caricare il logo")
             
-        st.markdown("<p style='text-align: center;'>v0.9.1b2</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center;'>v0.9.2b2</p>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center;'>Accedi per continuare</p>", unsafe_allow_html=True)
     
     try:
@@ -139,13 +137,14 @@ def authenticate():
 if not authenticate():
     st.stop()
 
-if 'has_seen_changelog' not in st.session_state:
-    with st.expander("🆕 Novità in Hotel Groups Displacement Analyzer v0.9.1b2", expanded=True):
+changelog_key = f"has_seen_changelog_{st.session_state['username']}"
+if changelog_key not in st.session_state:
+    with st.expander("🆕 Novità in Hotel Groups Displacement Analyzer v0.9.2b2", expanded=True):
         changelog_content = load_changelog()
         st.markdown(changelog_content)
         
         if st.button("Ho capito", type="primary"):
-            st.session_state['has_seen_changelog'] = True
+            st.session_state[changelog_key] = True
             st.rerun()
 
 st.sidebar.info(f"Accesso effettuato come: {st.session_state['username']}")
@@ -153,10 +152,12 @@ if st.sidebar.button("Logout"):
     for key in ['authenticated', 'username', 'login_time', 'analysis_phase', 'wizard_step', 'forecast_method', 
                'pickup_factor', 'pickup_percentage', 'pickup_value', 'series_data', 'current_passage', 
                'series_complete', 'raw_excel_data', 'available_dates', 'analyzed_data', 'selected_start_date', 
-               'selected_end_date', 'events_data_cache', 'events_data_updated', 'enable_extended_reasoning',
-               'has_seen_changelog']:
+               'selected_end_date', 'events_data_cache', 'events_data_updated', 'enable_extended_reasoning']:
         if key in st.session_state:
             del st.session_state[key]
+    changelog_keys = [k for k in st.session_state if k.startswith("has_seen_changelog_")]
+    for key in changelog_keys:
+        del st.session_state[key]
     st.rerun()
 
 st.markdown(f"""
@@ -770,7 +771,18 @@ def process_imported_data(idv_cy_data, idv_ly_data, grp_otb_data, grp_opz_data, 
         
         result_df = result_df.fillna(0)
         
-        result_df['fcst_ind_rn'] = result_df['ly_ind_rn'] - result_df['otb_ind_rn']
+        if 'forecast_method' not in st.session_state:
+            st.session_state['forecast_method'] = "LY - OTB"
+        
+        if st.session_state['forecast_method'] == "Basato su LY":
+            result_df['fcst_ind_rn'] = np.ceil(result_df['ly_ind_rn'] * st.session_state.get('pickup_factor', 1.0))
+        elif st.session_state['forecast_method'] == "Percentuale su OTB":
+            result_df['fcst_ind_rn'] = np.ceil(result_df['otb_ind_rn'] * (1 + st.session_state.get('pickup_percentage', 20)/100))
+        elif st.session_state['forecast_method'] == "Valore assoluto":
+            result_df['fcst_ind_rn'] = result_df['otb_ind_rn'] + st.session_state.get('pickup_value', 10)
+        else:  # "LY - OTB" (default)
+            result_df['fcst_ind_rn'] = result_df['ly_ind_rn'] - result_df['otb_ind_rn']
+        
         result_df['fcst_ind_adr'] = result_df['otb_ind_adr']
         
         result_df['otb_ind_rev'] = result_df['otb_ind_rn'] * result_df['otb_ind_adr']
@@ -901,7 +913,18 @@ def process_uploaded_files(idv_cy_file, idv_ly_file, grp_otb_file, grp_opz_file,
         
         result_df = result_df.fillna(0)
         
-        result_df['fcst_ind_rn'] = result_df['ly_ind_rn'] - result_df['otb_ind_rn']
+        if 'forecast_method' not in st.session_state:
+            st.session_state['forecast_method'] = "LY - OTB"
+        
+        if st.session_state['forecast_method'] == "Basato su LY":
+            result_df['fcst_ind_rn'] = np.ceil(result_df['ly_ind_rn'] * st.session_state.get('pickup_factor', 1.0))
+        elif st.session_state['forecast_method'] == "Percentuale su OTB":
+            result_df['fcst_ind_rn'] = np.ceil(result_df['otb_ind_rn'] * (1 + st.session_state.get('pickup_percentage', 20)/100))
+        elif st.session_state['forecast_method'] == "Valore assoluto":
+            result_df['fcst_ind_rn'] = result_df['otb_ind_rn'] + st.session_state.get('pickup_value', 10)
+        else:  # "LY - OTB" (default)
+            result_df['fcst_ind_rn'] = result_df['ly_ind_rn'] - result_df['otb_ind_rn']
+        
         result_df['fcst_ind_adr'] = result_df['otb_ind_adr']
         
         result_df['otb_ind_rev'] = result_df['otb_ind_rn'] * result_df['otb_ind_adr']
@@ -1030,7 +1053,7 @@ class ExcelCompatibleDisplacementAnalyzer:
         
         extra_vs_ly = adr_netto - avg_adr_ly
         
-        accepted_rooms = total_group_rooms
+        accepted_rooms = analysis_df['camere_gruppo'].sum()
         displaced_rooms = analysis_df['camere_displaced'].sum()
         
         avg_occ_current = analysis_df['occupazione_attuale'].mean()
@@ -1191,7 +1214,7 @@ class ExcelCompatibleDisplacementAnalyzer:
         return fig, fig_summary
 
 
-st.title("Hotel Group Displacement Analyzer v0.9.1b2")
+st.title("Hotel Group Displacement Analyzer v0.9.2b2")
 st.markdown("*Strumento di analisi richieste preventivo gruppi*")
 
 with st.sidebar:
@@ -1435,8 +1458,8 @@ elif data_source == "Inserimento manuale":
         st.session_state['wizard_step'] = 1
     
     if 'forecast_method' not in st.session_state:
-        st.session_state['forecast_method'] = "Basato su LY"
-        st.session_state['pickup_factor'] = 1.1
+        st.session_state['forecast_method'] = "LY - OTB"
+        st.session_state['pickup_factor'] = 1.0
         st.session_state['pickup_percentage'] = 20
         st.session_state['pickup_value'] = 10
     
@@ -1649,7 +1672,29 @@ elif data_source == "Inserimento manuale":
             if enable_wizard:
                 st.markdown("👇 **Imposta i parametri per il forecast**")
             
-            st.info("Il forecast è calcolato come LY IND - OTB IND (pickup rimanente dall'anno precedente)")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                forecast_method = st.selectbox("Metodo di Forecast", 
+                                            ["LY - OTB", "Basato su LY", "Percentuale su OTB", "Valore assoluto"],
+                                            index=["LY - OTB", "Basato su LY", "Percentuale su OTB", "Valore assoluto"].index(st.session_state['forecast_method']))
+                st.session_state['forecast_method'] = forecast_method
+            
+            with col2:
+                if forecast_method == "Basato su LY":
+                    pickup_factor = st.slider("Moltiplicatore LY", 0.5, 2.0, st.session_state['pickup_factor'], 0.1, 
+                                          help="Moltiplica i dati LY per questo fattore")
+                    st.session_state['pickup_factor'] = pickup_factor
+                elif forecast_method == "Percentuale su OTB":
+                    pickup_percentage = st.slider("Pickup %", 0, 100, st.session_state['pickup_percentage'], 5, 
+                                              help="Aggiunge questa percentuale all'OTB attuale")
+                    st.session_state['pickup_percentage'] = pickup_percentage
+                elif forecast_method == "Valore assoluto":
+                    pickup_value = st.number_input("Camere da aggiungere", 0, 100, st.session_state['pickup_value'],
+                                                help="Aggiunge questo numero di camere all'OTB attuale")
+                    st.session_state['pickup_value'] = pickup_value
+                else:  # LY - OTB
+                    st.info("Il forecast è calcolato come LY IND - OTB IND (pickup rimanente dall'anno precedente)")
         
         if enable_wizard:
             col1, col2 = st.columns([1, 1])
@@ -1671,18 +1716,26 @@ elif data_source == "Inserimento manuale":
                            left_index=True, right_index=True)
         final_data = pd.merge(final_data, edited_adr_ly[['ly_ind_adr']], 
                            left_index=True, right_index=True)
+        
+        if st.session_state['forecast_method'] == "Basato su LY":
+            final_data['fcst_ind_rn'] = np.ceil(final_data['ly_ind_rn'] * st.session_state['pickup_factor'])
+        elif st.session_state['forecast_method'] == "Percentuale su OTB":
+            final_data['fcst_ind_rn'] = np.ceil(final_data['otb_ind_rn'] * (1 + st.session_state['pickup_percentage']/100))
+        elif st.session_state['forecast_method'] == "Valore assoluto":
+            final_data['fcst_ind_rn'] = final_data['otb_ind_rn'] + st.session_state['pickup_value']
+        else:  # LY - OTB (default)
+            final_data['fcst_ind_rn'] = final_data['ly_ind_rn'] - final_data['otb_ind_rn']
        
-        final_data['fcst_ind_rn'] = final_data['ly_ind_rn'] - final_data['otb_ind_rn']
         final_data['fcst_ind_adr'] = final_data['otb_ind_adr']
-       
-        final_data['finale_rn'] = final_data['fcst_ind_rn'] + final_data['otb_ind_rn'] + final_data['grp_otb_rn']
-        final_data['finale_opz_rn'] = final_data['finale_rn'] + final_data['grp_opz_rn']
        
         final_data['otb_ind_rev'] = final_data['otb_ind_rn'] * final_data['otb_ind_adr']
         final_data['ly_ind_rev'] = final_data['ly_ind_rn'] * final_data['ly_ind_adr']
         final_data['grp_otb_rev'] = final_data['grp_otb_rn'] * final_data['grp_otb_adr']
         final_data['grp_opz_rev'] = final_data['grp_opz_rn'] * final_data['grp_opz_adr']
         final_data['fcst_ind_rev'] = final_data['fcst_ind_rn'] * final_data['fcst_ind_adr']
+       
+        final_data['finale_rn'] = final_data['fcst_ind_rn'] + final_data['otb_ind_rn'] + final_data['grp_otb_rn']
+        final_data['finale_opz_rn'] = final_data['finale_rn'] + final_data['grp_opz_rn']
        
         final_data['finale_rev'] = final_data['otb_ind_rev'] + final_data['fcst_ind_rev'] + final_data['grp_otb_rev']
         final_data['finale_adr'] = np.where(final_data['finale_rn'] > 0,
@@ -2477,11 +2530,11 @@ st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Hotel Group Displacement Analyzer | v0.9.1b2 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
+       <p>Hotel Group Displacement Analyzer | v0.9.2b2 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}<br>
        Distributed under MIT License
        </p>
    </div>
    """, 
    unsafe_allow_html=True
-)
+) = st.slider("Moltiplicatore LY", 0.5, 2.0, st
