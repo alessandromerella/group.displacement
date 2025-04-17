@@ -1678,7 +1678,7 @@ elif data_source == "Inserimento manuale":
             with col2:
                 if st.button("Avanti →", key="next1", type="primary", use_container_width=True):
                     next_step()
-else:
+    else:
         edited_rn_cy = st.data_editor(
             df_base[['data', 'giorno', 'otb_ind_rn', 'grp_otb_rn', 'grp_opz_rn']],
             hide_index=True,
@@ -1688,7 +1688,7 @@ else:
         )
         st.markdown("", unsafe_allow_html=True)
     
-wizard_visible = not enable_wizard or st.session_state.get('wizard_step') == 2
+    wizard_visible = not enable_wizard or st.session_state.get('wizard_step') == 2
     if wizard_visible:
         st.subheader("Inserimento ADR")
         
