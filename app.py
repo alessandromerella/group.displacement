@@ -2537,4 +2537,4 @@ st.markdown(
    </div>
    """, 
    unsafe_allow_html=True
-) = st.slider("Moltiplicatore LY", 0.5, 2.0, st
+)               
