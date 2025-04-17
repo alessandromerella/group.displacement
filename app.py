@@ -1688,8 +1688,8 @@ else:
         )
         st.markdown("", unsafe_allow_html=True)
     
-    wizard_visible = not enable_wizard or st.session_state.get('wizard_step') == 2
-    if wizard_visible:
+wizard_visible = not enable_wizard or st.session_state.get('wizard_step') == 2
+if wizard_visible:
         st.subheader("Inserimento ADR")
         
         st.markdown('<div class="corrente-container">', unsafe_allow_html=True)
