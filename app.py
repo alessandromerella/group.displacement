@@ -15,7 +15,7 @@ import json
 import os
 import xlsxwriter
 
-st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.5r2", layout="wide")
+st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.4r4", layout="wide")
 
 COLOR_PALETTE = {
     "primary": "#D8C0B7",
@@ -145,14 +145,7 @@ def load_changelog():
     except FileNotFoundError:
         return """# Changelog Hotel Group Displacement Analyzer
 
-## v0.9.5r2 (Attuale)
-- **Major Bugfix**: Risolto definitivamente il problema con il parser delle richieste booking
-- **Miglioramento UX**: Implementato meccanismo robusto per trasferire i dati estratti ai form
-- **Bugfix**: Risolto problema di importazione date italiane nei file Excel
-- **Miglioramento UX**: Aggiunto pulsante esplicito per avviare l'analisi nella modalità manuale
-- **Stabilità**: Migliorata gestione errori durante l'importazione dei file Excel
-
-## v0.9.4r4
+## v0.9.4r4 (Attuale)
 - **Bugfix**: Risolto definitivamente il problema con il parsing automatico delle richieste booking
 - **Miglioramento UX**: Aggiornato il sistema di gestione delle key di widget per miglior controllo
 - **Performance**: Ottimizzato il codice di aggiornamento dei campi di input
@@ -243,7 +236,7 @@ def authenticate():
     st.markdown("""
     <div style="display: flex; justify-content: center; align-items: center; flex-direction: column; margin-bottom: 20px;">
         <img src="https://www.revguardian.altervista.org/hgd.logo.png" style="width: 200px; margin-bottom: 10px;">
-        <p style="text-align: center; margin: 0;">v0.9.5r2</p>
+        <p style="text-align: center; margin: 0;">v0.9.4r4</p>
         <p style="text-align: center; margin-top: 10px;">Accedi per continuare</p>
     </div>
     """, unsafe_allow_html=True)
@@ -303,7 +296,7 @@ if st.sidebar.button("Logout"):
                'pickup_factor', 'pickup_percentage', 'pickup_value', 'series_data', 'current_passage', 
                'series_complete', 'raw_excel_data', 'available_dates', 'analyzed_data', 'selected_start_date', 
                'selected_end_date', 'events_data_cache', 'events_data_updated', 'enable_extended_reasoning',
-               'room_types_df', 'rooms_by_day_df', 'parsed_complete', 'import_confirmed']:
+               'room_types_df', 'rooms_by_day_df']:
         if key in st.session_state:
             del st.session_state[key]
     changelog_keys = [k for k in st.session_state if k.startswith("has_seen_changelog_")]
@@ -753,21 +746,6 @@ def identify_excel_file_type(df):
         st.error(f"Errore nell'identificazione del tipo di file: {e}")
         return "UNKNOWN", None, None
 
-def parse_italian_date(date_str):
-    if not isinstance(date_str, str):
-        if isinstance(date_str, (datetime, date)):
-            return pd.to_datetime(date_str)
-        return pd.NaT
-    
-    # Cerca il pattern DD/MM/YYYY nella stringa
-    match = re.search(r'(\d{2}/\d{2}/\d{4})', date_str)
-    if match:
-        try:
-            return pd.to_datetime(match.group(1), format='%d/%m/%Y', errors='coerce')
-        except:
-            return pd.NaT
-    return pd.NaT
-
 def process_excel_import(uploaded_files):
     if not uploaded_files:
         return None, None, None, None
@@ -816,14 +794,12 @@ def process_excel_import(uploaded_files):
             data_df = data_df[~data_df['Giorno'].isna()]
             data_df = data_df[~data_df['Giorno'].astype(str).str.contains('Filtri applicati:', na=False)]
             
-            # Converti date nel formato italiano
-            data_df['Giorno'] = data_df['Giorno'].apply(parse_italian_date)
-            data_df = data_df.dropna(subset=['Giorno'])
-            
             numeric_cols = ['Room nights', 'Bed nights', 'ADR Cam', 'ADR Bed', 'Room Revenue', 'RevPar']
             for col in numeric_cols:
                 if col in data_df.columns:
                     data_df[col] = pd.to_numeric(data_df[col], errors='coerce')
+            
+            data_df['Giorno'] = pd.to_datetime(data_df['Giorno'], errors='coerce')
             
             if file_type == "IDV":
                 if str(current_year) in str(year) or (month_year and str(current_year) in str(month_year)):
@@ -842,37 +818,6 @@ def process_excel_import(uploaded_files):
         
         except Exception as e:
             st.error(f"Errore nell'elaborazione del file {uploaded_file.name}: {e}")
-            import traceback
-            st.code(traceback.format_exc())
-    
-    try:
-        if idv_cy_data is not None and 'Giorno' in idv_cy_data.columns:
-            idv_cy_data = idv_cy_data.dropna(subset=['Giorno'])
-            
-            if not idv_cy_data.empty:
-                min_date = idv_cy_data['Giorno'].min()
-                max_date = idv_cy_data['Giorno'].max()
-                
-                if pd.notna(min_date) and pd.notna(max_date):
-                    available_dates = pd.date_range(start=min_date, end=max_date)
-                    st.session_state['available_dates'] = available_dates
-                    
-                    st.success(f"File elaborati con successo! Range date disponibili: {available_dates.min().strftime('%d/%m/%Y')} - {available_dates.max().strftime('%d/%m/%Y')}")
-                else:
-                    st.error("Non è stato possibile determinare un intervallo di date valido dai dati importati.")
-                    available_dates = pd.date_range(start=datetime.now(), end=datetime.now() + timedelta(days=30))
-                    st.session_state['available_dates'] = available_dates
-            else:
-                st.error("Il file importato non contiene date valide dopo la pulizia.")
-                available_dates = pd.date_range(start=datetime.now(), end=datetime.now() + timedelta(days=30))
-                st.session_state['available_dates'] = available_dates
-        else:
-            st.error("Il file IDV anno corrente manca o non ha una colonna 'Giorno'.")
-            return None, None, None, None
-    except Exception as e:
-        st.error(f"Errore nell'elaborazione delle date: {str(e)}")
-        available_dates = pd.date_range(start=datetime.now(), end=datetime.now() + timedelta(days=30))
-        st.session_state['available_dates'] = available_dates
     
     return idv_cy_data, idv_ly_data, grp_otb_data, grp_opz_data
 
@@ -994,7 +939,6 @@ def process_imported_data(idv_cy_data, idv_ly_data, grp_otb_data, grp_opz_data, 
             result_df['fcst_ind_rn'] = result_df['otb_ind_rn'] + st.session_state.get('pickup_value', 10)
         else:
             result_df['fcst_ind_rn'] = result_df['ly_ind_rn'] - result_df['otb_ind_rn']
-            result_df['fcst_ind_rn'] = result_df['fcst_ind_rn'].apply(lambda x: max(0, x))
         
         result_df['fcst_ind_adr'] = result_df['otb_ind_adr']
         
@@ -1016,8 +960,6 @@ def process_imported_data(idv_cy_data, idv_ly_data, grp_otb_data, grp_opz_data, 
         
     except Exception as e:
         st.error(f"Errore nell'elaborazione dei dati importati: {e}")
-        import traceback
-        st.code(traceback.format_exc())
         return None
 
 def process_uploaded_files(idv_cy_file, idv_ly_file, grp_otb_file, grp_opz_file, date_range, date_column_name, rn_column_name, adr_column_name):
@@ -1139,7 +1081,6 @@ def process_uploaded_files(idv_cy_file, idv_ly_file, grp_otb_file, grp_opz_file,
             result_df['fcst_ind_rn'] = result_df['otb_ind_rn'] + st.session_state.get('pickup_value', 10)
         else:
             result_df['fcst_ind_rn'] = result_df['ly_ind_rn'] - result_df['otb_ind_rn']
-            result_df['fcst_ind_rn'] = result_df['fcst_ind_rn'].apply(lambda x: max(0, x))
         
         result_df['fcst_ind_adr'] = result_df['otb_ind_adr']
         
@@ -1501,7 +1442,7 @@ class ExcelCompatibleDisplacementAnalyzer:
         return fig, fig_summary
 
 
-st.title("Hotel Group Displacement Analyzer v0.9.5r2")
+st.title("Hotel Group Displacement Analyzer v0.9.4r4")
 st.markdown("*Strumento di analisi richieste preventivo gruppi*")
 
 with st.sidebar:
@@ -1609,15 +1550,32 @@ if enable_booking_parser:
                                 st.info("La data di partenza include il pernottamento (non è checkout)")
                     
                     if st.button("Conferma e utilizza questi dati", key="confirm_parsed_main_data"):
-                        st.session_state['import_confirmed'] = True
-                        st.session_state['import_data'] = {
-                            'group_name': parsed_data['group_name'],
-                            'arrival_date': parsed_data['arrival_date'],
-                            'departure_date': parsed_data['departure_date'],
-                            'num_rooms': parsed_data['num_rooms']
-                        }
-                        st.success("Dati confermati! Aggiornamento in corso...")
-                        time.sleep(1)
+                        if parsed_data['group_name']:
+                            st.session_state['parsed_group_name'] = parsed_data['group_name']
+                            st.session_state['group_name_input'] = parsed_data['group_name']
+                        
+                        if parsed_data['arrival_date']:
+                            st.session_state['parsed_arrival_date'] = parsed_data['arrival_date']
+                            st.session_state['parsed_start_date'] = parsed_data['arrival_date']
+                            st.session_state['start_date_input'] = parsed_data['arrival_date']
+                            st.session_state['arrival_date_input'] = parsed_data['arrival_date']
+                            st.session_state['Data di arrivo'] = parsed_data['arrival_date']
+                            st.session_state['Data inizio analisi'] = parsed_data['arrival_date']
+                        
+                        if parsed_data['departure_date']:
+                            st.session_state['parsed_departure_date'] = parsed_data['departure_date']
+                            st.session_state['parsed_end_date'] = parsed_data['departure_date']
+                            st.session_state['end_date_input'] = parsed_data['departure_date']
+                            st.session_state['departure_date_input'] = parsed_data['departure_date']
+                            st.session_state['Data di partenza'] = parsed_data['departure_date']
+                            st.session_state['Data fine analisi'] = parsed_data['departure_date']
+                        
+                        if parsed_data['num_rooms']:
+                            st.session_state['parsed_num_rooms'] = parsed_data['num_rooms']
+                            st.session_state['num_rooms_input'] = parsed_data['num_rooms']
+                            st.session_state['Numero camere ROH'] = parsed_data['num_rooms']
+                            st.session_state['Numero camere medio'] = parsed_data['num_rooms']
+                        
                         st.experimental_rerun()
                 else:
                     st.warning("Non è stato possibile estrarre informazioni dalla richiesta. Verifica il formato del testo.")
@@ -1643,8 +1601,8 @@ if data_source == "Import file Excel":
                         }
                         
                         available_dates = pd.date_range(
-                            start=idv_cy_data['data'].min(),
-                            end=idv_cy_data['data'].max()
+                            start=idv_cy_data['Giorno'].min(),
+                            end=idv_cy_data['Giorno'].max()
                         )
                         st.session_state['available_dates'] = available_dates
                         
@@ -1659,33 +1617,23 @@ if data_source == "Import file Excel":
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    default_start = datetime.now() + timedelta(days=30)
-                    if 'import_confirmed' in st.session_state and st.session_state['import_confirmed']:
-                        default_start = st.session_state['import_data']['arrival_date']
-                    else:
-                        default_start = st.session_state.get('selected_start_date', available_dates.min())
-                    
+                    default_start = st.session_state.get('parsed_start_date', available_dates.min())
                     start_date = st.date_input(
                         "Data inizio analisi", 
                         value=default_start,
                         min_value=available_dates.min(),
                         max_value=available_dates.max(),
-                        key=f"start_date_input_{int(time.time())}"
+                        key="start_date_input"
                     )
                 
                 with col2:
-                    default_end = datetime.now() + timedelta(days=33)
-                    if 'import_confirmed' in st.session_state and st.session_state['import_confirmed']:
-                        default_end = st.session_state['import_data']['departure_date']
-                    else:
-                        default_end = st.session_state.get('selected_end_date', available_dates.min() + timedelta(days=3))
-                    
+                    default_end = st.session_state.get('parsed_end_date', available_dates.min() + timedelta(days=3))
                     end_date = st.date_input(
                         "Data fine analisi", 
                         value=default_end,
                         min_value=available_dates.min(),
                         max_value=available_dates.max(),
-                        key=f"end_date_input_{int(time.time())}"
+                        key="end_date_input"
                     )
                 
                 if st.button("Carica dati per il periodo selezionato", type="primary"):
@@ -1707,9 +1655,7 @@ if data_source == "Import file Excel":
                             st.session_state['analyzed_data'] = processed_data
                             st.session_state['selected_start_date'] = start_date
                             st.session_state['selected_end_date'] = end_date
-                            st.success("Dati elaborati con successo!")
-                            time.sleep(1)
-                            st.experimental_rerun()
+                            st.rerun()
             
             if st.button("Cambia file", key="reset_excel_data"):
                 if 'raw_excel_data' in st.session_state:
@@ -1791,22 +1737,11 @@ elif data_source == "Inserimento manuale":
     
     col1, col2 = st.columns(2)
     with col1:
-        default_start = datetime.now() + timedelta(days=30)
-        if 'import_confirmed' in st.session_state and st.session_state['import_confirmed']:
-            default_start = st.session_state['import_data']['arrival_date']
-        else:
-            default_start = st.session_state.get('selected_start_date', default_start)
-        
-        start_date = st.date_input("Data inizio analisi", value=default_start, key=f"start_date_input_{int(time.time())}")
-    
+        default_start = st.session_state.get('parsed_start_date', datetime.now() + timedelta(days=30))
+        start_date = st.date_input("Data inizio analisi", value=default_start, key="start_date_input")
     with col2:
-        default_end = datetime.now() + timedelta(days=33)
-        if 'import_confirmed' in st.session_state and st.session_state['import_confirmed']:
-            default_end = st.session_state['import_data']['departure_date']
-        else:
-            default_end = st.session_state.get('selected_end_date', default_end)
-        
-        end_date = st.date_input("Data fine analisi", value=default_end, key=f"end_date_input_{int(time.time())}")
+        default_end = st.session_state.get('parsed_end_date', datetime.now() + timedelta(days=33))
+        end_date = st.date_input("Data fine analisi", value=default_end, key="end_date_input")
     
     st.header("2️⃣ Dati On The Books e Forecast")
     
@@ -2085,7 +2020,6 @@ elif data_source == "Inserimento manuale":
             final_data['fcst_ind_rn'] = final_data['otb_ind_rn'] + st.session_state['pickup_value']
         else:  # LY - OTB (default)
             final_data['fcst_ind_rn'] = final_data['ly_ind_rn'] - final_data['otb_ind_rn']
-            final_data['fcst_ind_rn'] = final_data['fcst_ind_rn'].apply(lambda x: max(0, x))
        
         final_data['fcst_ind_adr'] = final_data['otb_ind_adr']
        
@@ -2162,43 +2096,16 @@ elif data_source == "Inserimento manuale":
             st.error(f"Errore nel calcolo del forecast: {e}")
         analyzed_data = None
 
-    # Pulsante per avviare l'analisi dei dati manuali
-    if data_source == "Inserimento manuale" and analyzed_data is not None:
-        if not enable_wizard or st.session_state.get('wizard_step') == 6:
-            st.markdown("---")
-            st.subheader("Avvia l'analisi")
-            st.info("Hai inserito tutti i dati necessari. Clicca sul pulsante per procedere con l'analisi.")
-            
-            if st.button("✅ Avvia Analisi dei Dati Inseriti", type="primary", use_container_width=True):
-                st.session_state['analyzed_data'] = analyzed_data
-                st.session_state['selected_start_date'] = start_date
-                st.session_state['selected_end_date'] = end_date
-                st.session_state['analysis_phase'] = 'verify'
-                st.success("Dati elaborati con successo! Passaggio alla fase di analisi...")
-                time.sleep(1)
-                st.experimental_rerun()
-
 if start_date is None or end_date is None:
     st.header("1️⃣ Periodo di Analisi")
     
     col1, col2 = st.columns(2)
     with col1:
-        default_start = datetime.now() + timedelta(days=30)
-        if 'import_confirmed' in st.session_state and st.session_state['import_confirmed']:
-            default_start = st.session_state['import_data']['arrival_date']
-        
-        start_date = st.date_input("Data inizio analisi", value=default_start, key=f"start_date_input_{int(time.time())}")
-    
+        default_start = st.session_state.get('parsed_start_date', datetime.now() + timedelta(days=30))
+        start_date = st.date_input("Data inizio analisi", value=default_start, key="start_date_input")
     with col2:
-        default_end = datetime.now() + timedelta(days=33)
-        if 'import_confirmed' in st.session_state and st.session_state['import_confirmed']:
-            default_end = st.session_state['import_data']['departure_date']
-        
-        end_date = st.date_input("Data fine analisi", value=default_end, key=f"end_date_input_{int(time.time())}")
-    
-    if 'import_confirmed' in st.session_state and st.session_state['import_confirmed']:
-        st.session_state['import_confirmed'] = False
-        
+        default_end = st.session_state.get('parsed_end_date', datetime.now() + timedelta(days=33))
+        end_date = st.date_input("Data fine analisi", value=default_end, key="end_date_input")
 elif data_source == "Import file Excel" and 'analyzed_data' in st.session_state:
     st.header("1️⃣ Periodo di Analisi")
     st.info(f"Periodo di analisi: dal {start_date.strftime('%d/%m/%Y')} al {end_date.strftime('%d/%m/%Y')}")
@@ -2207,14 +2114,8 @@ st.header("3️⃣ Dettagli Richiesta Gruppo")
 
 col1, col2 = st.columns(2)
 with col1:
-    default_group_name = "Corporate Meeting"
-    if 'import_confirmed' in st.session_state and st.session_state['import_confirmed']:
-        default_group_name = st.session_state['import_data']['group_name']
-    else:
-        default_group_name = st.session_state.get('group_name', default_group_name)
-    
-    group_name = st.text_input("Nome Gruppo", value=default_group_name, key=f"group_name_input_{int(time.time())}")
-    st.session_state['group_name'] = group_name
+    default_group_name = st.session_state.get('parsed_group_name', "Corporate Meeting")
+    group_name = st.text_input("Nome Gruppo", value=default_group_name, key="group_name_input")
     
     st.subheader("Configurazione Camere")
     
@@ -2226,30 +2127,21 @@ with col1:
     )
     
     if room_config_option == "Contingente fisso ROH":
-        default_num_rooms = 25
-        if 'import_confirmed' in st.session_state and st.session_state['import_confirmed']:
-            default_num_rooms = st.session_state['import_data']['num_rooms']
-        
-        num_rooms = st.number_input("Numero camere ROH", min_value=1, value=default_num_rooms, key=f"num_rooms_input_{int(time.time())}")
+        default_num_rooms = st.session_state.get('parsed_num_rooms', 25)
+        num_rooms = st.number_input("Numero camere ROH", min_value=1, value=default_num_rooms, key="num_rooms_input")
         room_types = [{"tipo": "ROH", "numero": num_rooms, "adr_addon": 0.0}]
         
     elif room_config_option == "Camere variabili per giorno":
         st.info("Aggiungi dettagli specifici per giorno nella sezione sottostante")
-        default_num_rooms = 25
-        if 'import_confirmed' in st.session_state and st.session_state['import_confirmed']:
-            default_num_rooms = st.session_state['import_data']['num_rooms']
-        
-        num_rooms = st.number_input("Numero camere medio", min_value=1, value=default_num_rooms, key=f"num_rooms_input_{int(time.time())}")
+        default_num_rooms = st.session_state.get('parsed_num_rooms', 25)
+        num_rooms = st.number_input("Numero camere medio", min_value=1, value=default_num_rooms, key="num_rooms_input")
         room_types = [{"tipo": "ROH", "numero": num_rooms, "adr_addon": 0.0}]
         
     elif room_config_option == "Multiple tipologie":
         st.subheader("Tipologie di camere")
         
         if 'room_types_df' not in st.session_state:
-            default_num_rooms = 25
-            if 'import_confirmed' in st.session_state and st.session_state['import_confirmed']:
-                default_num_rooms = st.session_state['import_data']['num_rooms']
-            
+            default_num_rooms = st.session_state.get('parsed_num_rooms', 25)
             st.session_state.room_types_df = pd.DataFrame({
                 'tipo': ['ROH', 'Superior', 'Deluxe'],
                 'numero': [max(default_num_rooms-10, 15), 8, 2],
@@ -2276,17 +2168,11 @@ with col1:
         
         room_types = edited_types.to_dict('records')
     
-    default_arrival = start_date
-    if 'import_confirmed' in st.session_state and st.session_state['import_confirmed']:
-        default_arrival = st.session_state['import_data']['arrival_date']
+    default_arrival = st.session_state.get('parsed_arrival_date', start_date)
+    group_arrival = st.date_input("Data di arrivo", value=default_arrival, key="arrival_date_input")
     
-    group_arrival = st.date_input("Data di arrivo", value=default_arrival, key=f"arrival_date_input_{int(time.time())}")
-    
-    default_departure = end_date
-    if 'import_confirmed' in st.session_state and st.session_state['import_confirmed']:
-        default_departure = st.session_state['import_data']['departure_date']
-    
-    group_departure = st.date_input("Data di partenza", value=default_departure, key=f"departure_date_input_{int(time.time())}")
+    default_departure = st.session_state.get('parsed_departure_date', end_date)
+    group_departure = st.date_input("Data di partenza", value=default_departure, key="departure_date_input")
     
 with col2:
     adr_lordo = st.number_input("ADR base proposta (€ lordi)", min_value=0.0, value=900.0, key="adr_lordo_input")
@@ -3155,7 +3041,7 @@ st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Hotel Group Displacement Analyzer | v0.9.5r2 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
+       <p>Hotel Group Displacement Analyzer | v0.9.4r4 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}<br>
        Distributed under MIT License
        </p>
