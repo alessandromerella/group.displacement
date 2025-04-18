@@ -15,7 +15,7 @@ import json
 import os
 import xlsxwriter
 
-st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.3r3", layout="wide")
+st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.4", layout="wide")
 
 COLOR_PALETTE = {
     "primary": "#D8C0B7",
@@ -77,6 +77,66 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 """
 
+def parse_booking_request(text):
+    results = {
+        'group_name': None,
+        'arrival_date': None,
+        'departure_date': None,
+        'num_rooms': None,
+        'is_checkout': True
+    }
+    
+    agency_patterns = [
+        r'nome\s+agenzia\s*:\s*([^\n]+)',
+        r'agenzia\s*:\s*([^\n]+)',
+        r'gruppo\s*:\s*([^\n]+)',
+        r'nome\s+gruppo\s*:\s*([^\n]+)'
+    ]
+    
+    for pattern in agency_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            results['group_name'] = match.group(1).strip()
+            break
+    
+    date_pattern = r'[Dd]al\s+(\d+)\s+([a-zA-Z]+)\s+(?:al|a)\s+(\d+)\s+([a-zA-Z]+)\s+(\d{4})'
+    match = re.search(date_pattern, text)
+    if match:
+        day1, month1, day2, month2, year = match.groups()
+        
+        month_map = {
+            'gennaio': 1, 'febbraio': 2, 'marzo': 3, 'aprile': 4, 'maggio': 5, 'giugno': 6,
+            'luglio': 7, 'agosto': 8, 'settembre': 9, 'ottobre': 10, 'novembre': 11, 'dicembre': 12,
+            'gen': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'mag': 5, 'giu': 6,
+            'lug': 7, 'ago': 8, 'set': 9, 'ott': 10, 'nov': 11, 'dic': 12
+        }
+        
+        month_num1 = month_map.get(month1.lower(), None)
+        month_num2 = month_map.get(month2.lower(), None)
+        
+        if month_num1 and month_num2:
+            results['arrival_date'] = datetime(int(year), month_num1, int(day1)).date()
+            
+            if "incluso" in text.lower():
+                results['is_checkout'] = False
+                results['departure_date'] = datetime(int(year), month_num2, int(day2) + 1).date()
+            else:
+                results['departure_date'] = datetime(int(year), month_num2, int(day2)).date()
+    
+    room_patterns = [
+        r'(\d+)\s+camer[ae]',
+        r'camer[ae]\s*:\s*(\d+)',
+        r'n\.\s*camer[ae]\s*:\s*(\d+)'
+    ]
+    
+    for pattern in room_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            results['num_rooms'] = int(match.group(1))
+            break
+    
+    return results
+
 def load_changelog():
     try:
         with open("changelog.md", "r") as f:
@@ -84,7 +144,12 @@ def load_changelog():
     except FileNotFoundError:
         return """# Changelog Hotel Group Displacement Analyzer
 
-## v0.9.3r3 (Attuale)
+## v0.9.4 (Attuale)
+- **Nuova funzionalità**: Parsing automatico delle richieste di booking
+- **Correzioni**: Risolti problemi di indentazione nel codice
+- **Miglioramento UI**: Aggiunta validazione per i dati estratti automaticamente
+
+## v0.9.3r3 (Precedente)
 - **Miglioramento UI**: Aggiunta la possibilità di configurare camere variabili per giorno
 - **Miglioramento UI**: Aggiunto supporto per multiple tipologie di camera con supplementi
 - **Miglioramento UX**: I dati inseriti sono ora più evidenti nell'interfaccia
@@ -92,12 +157,12 @@ def load_changelog():
 - **Correzioni**: Risolti problemi con parametri deprecati
 - **Ottimizzazione**: Migliorata la navigazione tramite Tab nei data editor
 
-## v0.9.2b2 (Precedente)
+## v0.9.2b2
 - **Miglioramento Changelog**: Il changelog ora viene mostrato solo al primo accesso per ogni utente
 - **Miglioramento Forecast**: Ripristinate tutte le modalità di calcolo del forecast con "LY - OTB" come opzione predefinita
 - **Ottimizzazione**: Impostato il valore predefinito del moltiplicatore a 1.0
 
-## v0.9.1 
+## v0.9.1
 - **Correzione formula FCST IND**: Ora calcolata come LY IND - OTB IND
 - **Nuova funzionalità**: Esportazione report in formato Excel formattato
 - **Correzione display ADR**: Migliorata coerenza nei calcoli del valore totale gruppo
@@ -160,7 +225,7 @@ def authenticate():
         except:
             st.error("Impossibile caricare il logo")
             
-        st.markdown("<p style='text-align: center;'>v0.9.3r3</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center;'>v0.9.4</p>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center;'>Accedi per continuare</p>", unsafe_allow_html=True)
         
         if st.button("📋 What's New", key="whats_new_btn"):
@@ -854,7 +919,7 @@ def process_imported_data(idv_cy_data, idv_ly_data, grp_otb_data, grp_opz_data, 
             result_df['fcst_ind_rn'] = np.ceil(result_df['otb_ind_rn'] * (1 + st.session_state.get('pickup_percentage', 20)/100))
         elif st.session_state['forecast_method'] == "Valore assoluto":
             result_df['fcst_ind_rn'] = result_df['otb_ind_rn'] + st.session_state.get('pickup_value', 10)
-        else:  # "LY - OTB" (default)
+        else:
             result_df['fcst_ind_rn'] = result_df['ly_ind_rn'] - result_df['otb_ind_rn']
         
         result_df['fcst_ind_adr'] = result_df['otb_ind_adr']
@@ -996,7 +1061,7 @@ def process_uploaded_files(idv_cy_file, idv_ly_file, grp_otb_file, grp_opz_file,
             result_df['fcst_ind_rn'] = np.ceil(result_df['otb_ind_rn'] * (1 + st.session_state.get('pickup_percentage', 20)/100))
         elif st.session_state['forecast_method'] == "Valore assoluto":
             result_df['fcst_ind_rn'] = result_df['otb_ind_rn'] + st.session_state.get('pickup_value', 10)
-        else:  # "LY - OTB" (default)
+        else:
             result_df['fcst_ind_rn'] = result_df['ly_ind_rn'] - result_df['otb_ind_rn']
         
         result_df['fcst_ind_adr'] = result_df['otb_ind_adr']
@@ -1359,7 +1424,7 @@ class ExcelCompatibleDisplacementAnalyzer:
         return fig, fig_summary
 
 
-st.title("Hotel Group Displacement Analyzer v0.9.3r3")
+st.title("Hotel Group Displacement Analyzer v0.9.4")
 st.markdown("*Strumento di analisi richieste preventivo gruppi*")
 
 with st.sidebar:
@@ -1960,9 +2025,54 @@ elif data_source == "Import file Excel" and 'analyzed_data' in st.session_state:
 
 st.header("3️⃣ Dettagli Richiesta Gruppo")
 
+# Nuova funzionalità: Parsing automatico delle richieste di booking
+with st.expander("Inserimento rapido da richiesta booking", expanded=True):
+    st.info("Incolla qui il testo della richiesta ricevuta dall'ufficio booking per compilare automaticamente i campi")
+    booking_text = st.text_area("Testo richiesta", height=150, 
+                               placeholder="Esempio: Dal 25 marzo al 30 maggio 2025, nome agenzia: Example Tours, 25 camere")
+    
+    if booking_text and st.button("Analizza richiesta", key="parse_booking_btn"):
+        with st.spinner("Analisi in corso..."):
+            parsed_data = parse_booking_request(booking_text)
+            
+            # Mostra i dati estratti per conferma
+            if any(v is not None for v in parsed_data.values()):
+                st.success("Dati estratti dalla richiesta:")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if parsed_data['group_name']:
+                        st.info(f"**Nome gruppo:** {parsed_data['group_name']}")
+                    if parsed_data['num_rooms']:
+                        st.info(f"**Numero camere:** {parsed_data['num_rooms']}")
+                
+                with col2:
+                    if parsed_data['arrival_date']:
+                        st.info(f"**Data arrivo:** {parsed_data['arrival_date'].strftime('%d/%m/%Y')}")
+                    if parsed_data['departure_date']:
+                        st.info(f"**Data partenza:** {parsed_data['departure_date'].strftime('%d/%m/%Y')}")
+                        if not parsed_data['is_checkout']:
+                            st.info("La data di partenza include il pernottamento (non è checkout)")
+                
+                if st.button("Conferma e utilizza questi dati", key="confirm_parsed_data"):
+                    # Salva i dati nella session_state per utilizzarli dopo
+                    if parsed_data['group_name']:
+                        st.session_state['parsed_group_name'] = parsed_data['group_name']
+                    if parsed_data['arrival_date']:
+                        st.session_state['parsed_arrival_date'] = parsed_data['arrival_date']
+                    if parsed_data['departure_date']:
+                        st.session_state['parsed_departure_date'] = parsed_data['departure_date']
+                    if parsed_data['num_rooms']:
+                        st.session_state['parsed_num_rooms'] = parsed_data['num_rooms']
+                    
+                    st.rerun()
+            else:
+                st.warning("Non è stato possibile estrarre informazioni dalla richiesta. Verifica il formato del testo o inserisci i dati manualmente.")
+
 col1, col2 = st.columns(2)
 with col1:
-    group_name = st.text_input("Nome Gruppo", "Corporate Meeting")
+    default_group_name = st.session_state.get('parsed_group_name', "Corporate Meeting")
+    group_name = st.text_input("Nome Gruppo", value=default_group_name)
     
     st.subheader("Configurazione Camere")
     
@@ -1974,21 +2084,24 @@ with col1:
     )
     
     if room_config_option == "Contingente fisso ROH":
-        num_rooms = st.number_input("Numero camere ROH", min_value=1, value=25)
+        default_num_rooms = st.session_state.get('parsed_num_rooms', 25)
+        num_rooms = st.number_input("Numero camere ROH", min_value=1, value=default_num_rooms)
         room_types = [{"tipo": "ROH", "numero": num_rooms, "adr_addon": 0.0}]
         
     elif room_config_option == "Camere variabili per giorno":
         st.info("Aggiungi dettagli specifici per giorno nella sezione sottostante")
-        num_rooms = st.number_input("Numero camere medio", min_value=1, value=25)
+        default_num_rooms = st.session_state.get('parsed_num_rooms', 25)
+        num_rooms = st.number_input("Numero camere medio", min_value=1, value=default_num_rooms)
         room_types = [{"tipo": "ROH", "numero": num_rooms, "adr_addon": 0.0}]
         
     elif room_config_option == "Multiple tipologie":
         st.subheader("Tipologie di camere")
         
         if 'room_types_df' not in st.session_state:
+            default_num_rooms = st.session_state.get('parsed_num_rooms', 25)
             st.session_state.room_types_df = pd.DataFrame({
                 'tipo': ['ROH', 'Superior', 'Deluxe'],
-                'numero': [15, 8, 2],
+                'numero': [max(default_num_rooms-10, 15), 8, 2],
                 'adr_addon': [0.0, 30.0, 50.0]
             })
         
@@ -2012,8 +2125,11 @@ with col1:
         
         room_types = edited_types.to_dict('records')
     
-    group_arrival = st.date_input("Data di arrivo", value=start_date, key="group_arrival")
-    group_departure = st.date_input("Data di partenza", value=end_date, key="group_departure")
+    default_arrival = st.session_state.get('parsed_arrival_date', start_date)
+    group_arrival = st.date_input("Data di arrivo", value=default_arrival, key="group_arrival")
+    
+    default_departure = st.session_state.get('parsed_departure_date', end_date)
+    group_departure = st.date_input("Data di partenza", value=default_departure, key="group_departure")
     
 with col2:
     adr_lordo = st.number_input("ADR base proposta (€ lordi)", min_value=0.0, value=900.0)
@@ -2882,7 +2998,7 @@ st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Hotel Group Displacement Analyzer | v0.9.3r3 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
+       <p>Hotel Group Displacement Analyzer | v0.9.4 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}<br>
        Distributed under MIT License
        </p>
