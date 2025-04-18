@@ -15,7 +15,7 @@ import json
 import os
 import xlsxwriter
 
-st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.4r2", layout="wide")
+st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.4r3", layout="wide")
 
 COLOR_PALETTE = {
     "primary": "#D8C0B7",
@@ -145,7 +145,12 @@ def load_changelog():
     except FileNotFoundError:
         return """# Changelog Hotel Group Displacement Analyzer
 
-## v0.9.4r2 (Attuale)
+## v0.9.4r3 (Attuale)
+- **Bugfix**: Risolto problema con il parsing automatico delle richieste booking
+- **Miglioramento UX**: I dati vengono adesso correttamente caricati nei campi dopo l'analisi
+- **Dipendenze**: Aggiunta dipendenza mancante requests nel requirements.txt
+
+## v0.9.4r2 (Precedente)
 - **Miglioramento UI**: Corretti problemi di visualizzazione nel login
 - **Bugfix**: Risolto problema con la visualizzazione del changelog
 - **Miglioramento UX**: Il parser delle richieste ora compila anche le date di analisi
@@ -226,7 +231,7 @@ def authenticate():
     st.markdown("""
     <div style="display: flex; justify-content: center; align-items: center; flex-direction: column; margin-bottom: 20px;">
         <img src="https://www.revguardian.altervista.org/hgd.logo.png" style="width: 200px; margin-bottom: 10px;">
-        <p style="text-align: center; margin: 0;">v0.9.4r2</p>
+        <p style="text-align: center; margin: 0;">v0.9.4r3</p>
         <p style="text-align: center; margin-top: 10px;">Accedi per continuare</p>
     </div>
     """, unsafe_allow_html=True)
@@ -1432,7 +1437,7 @@ class ExcelCompatibleDisplacementAnalyzer:
         return fig, fig_summary
 
 
-st.title("Hotel Group Displacement Analyzer v0.9.4r2")
+st.title("Hotel Group Displacement Analyzer v0.9.4r3")
 st.markdown("*Strumento di analisi richieste preventivo gruppi*")
 
 with st.sidebar:
@@ -1542,14 +1547,20 @@ if enable_booking_parser:
                     if st.button("Conferma e utilizza questi dati", key="confirm_parsed_main_data"):
                         if parsed_data['group_name']:
                             st.session_state['parsed_group_name'] = parsed_data['group_name']
+                            st.session_state['group_name'] = parsed_data['group_name']
                         if parsed_data['arrival_date']:
                             st.session_state['parsed_arrival_date'] = parsed_data['arrival_date']
                             st.session_state['parsed_start_date'] = parsed_data['arrival_date']
+                            st.session_state['start_date'] = parsed_data['arrival_date']
+                            st.session_state['group_arrival'] = parsed_data['arrival_date']
                         if parsed_data['departure_date']:
                             st.session_state['parsed_departure_date'] = parsed_data['departure_date']
                             st.session_state['parsed_end_date'] = parsed_data['departure_date']
+                            st.session_state['end_date'] = parsed_data['departure_date']
+                            st.session_state['group_departure'] = parsed_data['departure_date']
                         if parsed_data['num_rooms']:
                             st.session_state['parsed_num_rooms'] = parsed_data['num_rooms']
+                            st.session_state['num_rooms'] = parsed_data['num_rooms']
                         
                         st.experimental_rerun()
                 else:
@@ -3014,7 +3025,7 @@ st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Hotel Group Displacement Analyzer | v0.9.4r2 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
+       <p>Hotel Group Displacement Analyzer | v0.9.4r3 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}<br>
        Distributed under MIT License
        </p>
