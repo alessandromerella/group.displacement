@@ -15,7 +15,7 @@ import json
 import os
 import xlsxwriter
 
-st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.4r4", layout="wide")
+st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.5r3", layout="wide")
 
 COLOR_PALETTE = {
     "primary": "#D8C0B7",
@@ -145,7 +145,21 @@ def load_changelog():
     except FileNotFoundError:
         return """# Changelog Hotel Group Displacement Analyzer
 
-## v0.9.4r4 (Attuale)
+## v0.9.5r3 (Attuale)
+- **UX Miglioramento**: Campi data vuoti di default per evitare reset automatici
+- **Major Bugfix**: Risolto definitivamente l'errore KeyError nei file Excel
+- **Bugfix**: Parsing robusto delle date in formato italiano nei file Excel
+- **Miglioramento UX**: Migliorata l'affidabilità del trasferimento dati dal parser booking ai form
+- **Ottimizzazione**: Ridotto il numero di rerun automatici per migliorare la stabilità
+
+## v0.9.5r2
+- **Major Bugfix**: Risolto definitivamente il problema con il parser delle richieste booking
+- **Miglioramento UX**: Implementato meccanismo robusto per trasferire i dati estratti ai form
+- **Bugfix**: Risolto problema di importazione date italiane nei file Excel
+- **Miglioramento UX**: Aggiunto pulsante esplicito per avviare l'analisi nella modalità manuale
+- **Stabilità**: Migliorata gestione errori durante l'importazione dei file Excel
+
+## v0.9.4r4
 - **Bugfix**: Risolto definitivamente il problema con il parsing automatico delle richieste booking
 - **Miglioramento UX**: Aggiornato il sistema di gestione delle key di widget per miglior controllo
 - **Performance**: Ottimizzato il codice di aggiornamento dei campi di input
@@ -236,7 +250,7 @@ def authenticate():
     st.markdown("""
     <div style="display: flex; justify-content: center; align-items: center; flex-direction: column; margin-bottom: 20px;">
         <img src="https://www.revguardian.altervista.org/hgd.logo.png" style="width: 200px; margin-bottom: 10px;">
-        <p style="text-align: center; margin: 0;">v0.9.4r4</p>
+        <p style="text-align: center; margin: 0;">v0.9.5r3</p>
         <p style="text-align: center; margin-top: 10px;">Accedi per continuare</p>
     </div>
     """, unsafe_allow_html=True)
@@ -296,7 +310,7 @@ if st.sidebar.button("Logout"):
                'pickup_factor', 'pickup_percentage', 'pickup_value', 'series_data', 'current_passage', 
                'series_complete', 'raw_excel_data', 'available_dates', 'analyzed_data', 'selected_start_date', 
                'selected_end_date', 'events_data_cache', 'events_data_updated', 'enable_extended_reasoning',
-               'room_types_df', 'rooms_by_day_df']:
+               'room_types_df', 'rooms_by_day_df', 'booking_data', 'force_update', 'default_start_date', 'default_end_date']:
         if key in st.session_state:
             del st.session_state[key]
     changelog_keys = [k for k in st.session_state if k.startswith("has_seen_changelog_")]
@@ -746,6 +760,32 @@ def identify_excel_file_type(df):
         st.error(f"Errore nell'identificazione del tipo di file: {e}")
         return "UNKNOWN", None, None
 
+def safe_date_conversion(date_val):
+    if pd.isna(date_val):
+        return pd.NaT
+    
+    if isinstance(date_val, (datetime, date)):
+        return pd.to_datetime(date_val)
+    
+    date_str = str(date_val)
+    # Controlla formato italiano (Mar 01/04/2025)
+    date_only = re.search(r'(\d{2}/\d{2}/\d{4})', date_str)
+    if date_only:
+        try:
+            return pd.to_datetime(date_only.group(1), format='%d/%m/%Y')
+        except:
+            pass
+    
+    # Prova diversi formati
+    formats = ['%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y']
+    for fmt in formats:
+        try:
+            return pd.to_datetime(date_str, format=fmt, errors='coerce')
+        except:
+            continue
+    
+    return pd.NaT
+
 def process_excel_import(uploaded_files):
     if not uploaded_files:
         return None, None, None, None
@@ -794,12 +834,21 @@ def process_excel_import(uploaded_files):
             data_df = data_df[~data_df['Giorno'].isna()]
             data_df = data_df[~data_df['Giorno'].astype(str).str.contains('Filtri applicati:', na=False)]
             
+            # Conversione sicura delle date
+            data_df['Giorno'] = data_df['Giorno'].apply(safe_date_conversion)
+            data_df = data_df.dropna(subset=['Giorno'])
+            
+            if len(data_df) == 0:
+                st.error(f"Il file {uploaded_file.name} non contiene date valide dopo la pulizia")
+                continue
+            
             numeric_cols = ['Room nights', 'Bed nights', 'ADR Cam', 'ADR Bed', 'Room Revenue', 'RevPar']
             for col in numeric_cols:
                 if col in data_df.columns:
-                    data_df[col] = pd.to_numeric(data_df[col], errors='coerce')
+                    data_df[col] = pd.to_numeric(data_df[col], errors='coerce').fillna(0)
             
-            data_df['Giorno'] = pd.to_datetime(data_df['Giorno'], errors='coerce')
+            # Rinomina esplicitamente
+            data_df.rename(columns={'Giorno': 'data'}, inplace=True)
             
             if file_type == "IDV":
                 if str(current_year) in str(year) or (month_year and str(current_year) in str(month_year)):
@@ -817,7 +866,35 @@ def process_excel_import(uploaded_files):
                     st.success(f"File Gruppi Opzionati riconosciuto: {uploaded_file.name}")
         
         except Exception as e:
-            st.error(f"Errore nell'elaborazione del file {uploaded_file.name}: {e}")
+            st.error(f"Errore nell'elaborazione del file {uploaded_file.name}: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+    
+    # Gestione sicura del range date
+    try:
+        has_valid_dates = (idv_cy_data is not None and 'data' in idv_cy_data.columns 
+                           and len(idv_cy_data) > 0 and not idv_cy_data['data'].isna().all())
+        
+        if has_valid_dates:
+            min_date = idv_cy_data['data'].min()
+            max_date = idv_cy_data['data'].max()
+            
+            if pd.notna(min_date) and pd.notna(max_date):
+                available_dates = pd.date_range(start=min_date, end=max_date)
+                st.session_state['available_dates'] = available_dates
+                st.success(f"File elaborati con successo! Range date disponibili: {min_date.strftime('%d/%m/%Y')} - {max_date.strftime('%d/%m/%Y')}")
+            else:
+                raise ValueError("Date non valide nei dati importati")
+        else:
+            raise ValueError("Dati non validi o colonna data mancante")
+    except Exception as e:
+        st.error(f"Impossibile determinare il range di date: {str(e)}")
+        # Fallback a date predefinite
+        fallback_start = datetime.now()
+        fallback_end = fallback_start + timedelta(days=30)
+        available_dates = pd.date_range(start=fallback_start, end=fallback_end)
+        st.session_state['available_dates'] = available_dates
+        st.warning(f"Utilizzando date predefinite: {fallback_start.strftime('%d/%m/%Y')} - {fallback_end.strftime('%d/%m/%Y')}")
     
     return idv_cy_data, idv_ly_data, grp_otb_data, grp_opz_data
 
@@ -830,60 +907,69 @@ def process_imported_data(idv_cy_data, idv_ly_data, grp_otb_data, grp_opz_data, 
         result_df['data_ly'] = result_df['data'].apply(same_day_last_year)
         result_df['giorno_ly'] = result_df['data_ly'].dt.strftime('%a')
         
-        idv_cy_data.rename(columns={
-            'Giorno': 'data',
-            'Room nights': 'otb_ind_rn',
-            'ADR Cam': 'otb_ind_adr'
-        }, inplace=True)
-        
-        idv_cy_data['data'] = pd.to_datetime(idv_cy_data['data'])
-        idv_cy_filtered = idv_cy_data[idv_cy_data['data'].isin(result_df['data'])]
-        
-        if not idv_cy_filtered.empty:
-            idv_cy_grouped = idv_cy_filtered.groupby('data').agg({
-                'otb_ind_rn': 'sum',
-                'otb_ind_adr': 'mean'
-            }).reset_index()
+        # Assicuriamoci che idv_cy_data abbia le colonne corrette
+        if idv_cy_data is not None and 'data' in idv_cy_data.columns:
+            if 'Room nights' in idv_cy_data.columns:
+                idv_cy_data.rename(columns={
+                    'Room nights': 'otb_ind_rn',
+                    'ADR Cam': 'otb_ind_adr'
+                }, inplace=True)
             
-            result_df = pd.merge(result_df, idv_cy_grouped[['data', 'otb_ind_rn', 'otb_ind_adr']], 
-                                on='data', how='left')
+            idv_cy_filtered = idv_cy_data[idv_cy_data['data'].isin(result_df['data'])]
+            
+            if not idv_cy_filtered.empty:
+                idv_cy_grouped = idv_cy_filtered.groupby('data').agg({
+                    'otb_ind_rn': 'sum',
+                    'otb_ind_adr': 'mean'
+                }).reset_index()
+                
+                result_df = pd.merge(result_df, idv_cy_grouped[['data', 'otb_ind_rn', 'otb_ind_adr']], 
+                                    on='data', how='left')
+            else:
+                result_df['otb_ind_rn'] = 0
+                result_df['otb_ind_adr'] = 0
         else:
             result_df['otb_ind_rn'] = 0
             result_df['otb_ind_adr'] = 0
         
-        idv_ly_data.rename(columns={
-            'Giorno': 'data',
-            'Room nights': 'ly_ind_rn',
-            'ADR Cam': 'ly_ind_adr'
-        }, inplace=True)
-        
-        idv_ly_data['data'] = pd.to_datetime(idv_ly_data['data'])
-        
-        ly_dates = [same_day_last_year(d) for d in result_df['data']]
-        idv_ly_filtered = idv_ly_data[idv_ly_data['data'].isin(ly_dates)]
-        
-        if not idv_ly_filtered.empty:
-            idv_ly_filtered['data_ly'] = idv_ly_filtered['data']
+        # Gestione sicura idv_ly_data
+        if idv_ly_data is not None and 'data' in idv_ly_data.columns:
+            if 'Room nights' in idv_ly_data.columns:
+                idv_ly_data.rename(columns={
+                    'Room nights': 'ly_ind_rn',
+                    'ADR Cam': 'ly_ind_adr'
+                }, inplace=True)
             
-            idv_ly_grouped = idv_ly_filtered.groupby('data_ly').agg({
-                'ly_ind_rn': 'sum',
-                'ly_ind_adr': 'mean'
-            }).reset_index()
+            idv_ly_data['data'] = pd.to_datetime(idv_ly_data['data'])
             
-            result_df = pd.merge(result_df, idv_ly_grouped[['data_ly', 'ly_ind_rn', 'ly_ind_adr']], 
-                                on='data_ly', how='left')
+            ly_dates = [same_day_last_year(d) for d in result_df['data']]
+            idv_ly_filtered = idv_ly_data[idv_ly_data['data'].isin(ly_dates)]
+            
+            if not idv_ly_filtered.empty:
+                idv_ly_filtered['data_ly'] = idv_ly_filtered['data']
+                
+                idv_ly_grouped = idv_ly_filtered.groupby('data_ly').agg({
+                    'ly_ind_rn': 'sum',
+                    'ly_ind_adr': 'mean'
+                }).reset_index()
+                
+                result_df = pd.merge(result_df, idv_ly_grouped[['data_ly', 'ly_ind_rn', 'ly_ind_adr']], 
+                                    on='data_ly', how='left')
+            else:
+                result_df['ly_ind_rn'] = 0
+                result_df['ly_ind_adr'] = 0
         else:
             result_df['ly_ind_rn'] = 0
             result_df['ly_ind_adr'] = 0
         
-        if grp_otb_data is not None and not grp_otb_data.empty:
-            grp_otb_data.rename(columns={
-                'Giorno': 'data',
-                'Room nights': 'grp_otb_rn',
-                'ADR Cam': 'grp_otb_adr'
-            }, inplace=True)
+        # Gestione gruppi
+        if grp_otb_data is not None and not grp_otb_data.empty and 'data' in grp_otb_data.columns:
+            if 'Room nights' in grp_otb_data.columns:
+                grp_otb_data.rename(columns={
+                    'Room nights': 'grp_otb_rn',
+                    'ADR Cam': 'grp_otb_adr'
+                }, inplace=True)
             
-            grp_otb_data['data'] = pd.to_datetime(grp_otb_data['data'])
             grp_otb_filtered = grp_otb_data[grp_otb_data['data'].isin(result_df['data'])]
             
             if not grp_otb_filtered.empty:
@@ -901,14 +987,13 @@ def process_imported_data(idv_cy_data, idv_ly_data, grp_otb_data, grp_opz_data, 
             result_df['grp_otb_rn'] = 0
             result_df['grp_otb_adr'] = 0
         
-        if grp_opz_data is not None and not grp_opz_data.empty:
-            grp_opz_data.rename(columns={
-                'Giorno': 'data',
-                'Room nights': 'grp_opz_rn',
-                'ADR Cam': 'grp_opz_adr'
-            }, inplace=True)
+        if grp_opz_data is not None and not grp_opz_data.empty and 'data' in grp_opz_data.columns:
+            if 'Room nights' in grp_opz_data.columns:
+                grp_opz_data.rename(columns={
+                    'Room nights': 'grp_opz_rn',
+                    'ADR Cam': 'grp_opz_adr'
+                }, inplace=True)
             
-            grp_opz_data['data'] = pd.to_datetime(grp_opz_data['data'])
             grp_opz_filtered = grp_opz_data[grp_opz_data['data'].isin(result_df['data'])]
             
             if not grp_opz_filtered.empty:
@@ -939,6 +1024,7 @@ def process_imported_data(idv_cy_data, idv_ly_data, grp_otb_data, grp_opz_data, 
             result_df['fcst_ind_rn'] = result_df['otb_ind_rn'] + st.session_state.get('pickup_value', 10)
         else:
             result_df['fcst_ind_rn'] = result_df['ly_ind_rn'] - result_df['otb_ind_rn']
+            result_df['fcst_ind_rn'] = result_df['fcst_ind_rn'].apply(lambda x: max(0, x))
         
         result_df['fcst_ind_adr'] = result_df['otb_ind_adr']
         
@@ -960,148 +1046,8 @@ def process_imported_data(idv_cy_data, idv_ly_data, grp_otb_data, grp_opz_data, 
         
     except Exception as e:
         st.error(f"Errore nell'elaborazione dei dati importati: {e}")
-        return None
-
-def process_uploaded_files(idv_cy_file, idv_ly_file, grp_otb_file, grp_opz_file, date_range, date_column_name, rn_column_name, adr_column_name):
-    try:
-        if idv_cy_file is not None:
-            idv_cy_data = pd.read_excel(idv_cy_file)
-        else:
-            st.error("File dati IDV anno corrente mancante")
-            return None
-            
-        if idv_ly_file is not None:
-            idv_ly_data = pd.read_excel(idv_ly_file)
-        else:
-            st.error("File dati IDV anno precedente mancante")
-            return None
-        
-        grp_otb_data = pd.read_excel(grp_otb_file) if grp_otb_file is not None else pd.DataFrame()
-        grp_opz_data = pd.read_excel(grp_opz_file) if grp_opz_file is not None else pd.DataFrame()
-        
-        idv_cy_data[date_column_name] = pd.to_datetime(idv_cy_data[date_column_name])
-        idv_ly_data[date_column_name] = pd.to_datetime(idv_ly_data[date_column_name])
-        
-        if not grp_otb_data.empty:
-            grp_otb_data[date_column_name] = pd.to_datetime(grp_otb_data[date_column_name])
-        
-        if not grp_opz_data.empty:
-            grp_opz_data[date_column_name] = pd.to_datetime(grp_opz_data[date_column_name])
-        
-        result_dates = pd.date_range(start=date_range[0], end=date_range[-1])
-        result_df = pd.DataFrame({'data': result_dates})
-        
-        result_df['giorno'] = result_df['data'].dt.strftime('%a')
-        result_df['data_ly'] = result_df['data'].apply(same_day_last_year)
-        result_df['giorno_ly'] = result_df['data_ly'].dt.strftime('%a')
-        
-        def filter_and_agg(df, date_col, value_cols, dates):
-            filtered = df[df[date_col].isin(dates)]
-            if filtered.empty:
-                return pd.DataFrame({'data': dates, **{col: [0] * len(dates) for col in value_cols}})
-            
-            grouped = filtered.groupby(date_col).agg({
-                col: 'sum' if col == rn_column_name else 'mean' for col in value_cols
-            }).reset_index()
-            
-            grouped = grouped.rename(columns={date_col: 'data'})
-            return grouped
-        
-        idv_cy_filtered = filter_and_agg(
-            idv_cy_data, 
-            date_column_name, 
-            [rn_column_name, adr_column_name], 
-            result_df['data']
-        )
-        
-        idv_ly_filtered = filter_and_agg(
-            idv_ly_data, 
-            date_column_name, 
-            [rn_column_name, adr_column_name], 
-            result_df['data_ly']
-        )
-        
-        idv_cy_filtered = idv_cy_filtered.rename(columns={
-            rn_column_name: 'otb_ind_rn', 
-            adr_column_name: 'otb_ind_adr'
-        })
-        
-        idv_ly_filtered = idv_ly_filtered.rename(columns={
-            rn_column_name: 'ly_ind_rn', 
-            adr_column_name: 'ly_ind_adr'
-        })
-        idv_ly_filtered = idv_ly_filtered.rename(columns={'data': 'data_ly'})
-        
-        result_df = pd.merge(result_df, idv_cy_filtered, on='data', how='left')
-        
-        result_df = pd.merge(result_df, idv_ly_filtered, on='data_ly', how='left')
-        
-        if not grp_otb_data.empty:
-            grp_otb_filtered = filter_and_agg(
-                grp_otb_data, 
-                date_column_name, 
-                [rn_column_name, adr_column_name], 
-                result_df['data']
-            )
-            grp_otb_filtered = grp_otb_filtered.rename(columns={
-                rn_column_name: 'grp_otb_rn', 
-                adr_column_name: 'grp_otb_adr'
-            })
-            result_df = pd.merge(result_df, grp_otb_filtered, on='data', how='left')
-        else:
-            result_df['grp_otb_rn'] = 0
-            result_df['grp_otb_adr'] = 0
-        
-        if not grp_opz_data.empty:
-            grp_opz_filtered = filter_and_agg(
-                grp_opz_data, 
-                date_column_name, 
-                [rn_column_name, adr_column_name], 
-                result_df['data']
-            )
-            grp_opz_filtered = grp_opz_filtered.rename(columns={
-                rn_column_name: 'grp_opz_rn', 
-                adr_column_name: 'grp_opz_adr'
-            })
-            result_df = pd.merge(result_df, grp_opz_filtered, on='data', how='left')
-        else:
-            result_df['grp_opz_rn'] = 0
-            result_df['grp_opz_adr'] = 0
-        
-        result_df = result_df.fillna(0)
-        
-        if 'forecast_method' not in st.session_state:
-            st.session_state['forecast_method'] = "LY - OTB"
-        
-        if st.session_state['forecast_method'] == "Basato su LY":
-            result_df['fcst_ind_rn'] = np.ceil(result_df['ly_ind_rn'] * st.session_state.get('pickup_factor', 1.0))
-        elif st.session_state['forecast_method'] == "Percentuale su OTB":
-            result_df['fcst_ind_rn'] = np.ceil(result_df['otb_ind_rn'] * (1 + st.session_state.get('pickup_percentage', 20)/100))
-        elif st.session_state['forecast_method'] == "Valore assoluto":
-            result_df['fcst_ind_rn'] = result_df['otb_ind_rn'] + st.session_state.get('pickup_value', 10)
-        else:
-            result_df['fcst_ind_rn'] = result_df['ly_ind_rn'] - result_df['otb_ind_rn']
-        
-        result_df['fcst_ind_adr'] = result_df['otb_ind_adr']
-        
-        result_df['otb_ind_rev'] = result_df['otb_ind_rn'] * result_df['otb_ind_adr']
-        result_df['ly_ind_rev'] = result_df['ly_ind_rn'] * result_df['ly_ind_adr']
-        result_df['grp_otb_rev'] = result_df['grp_otb_rn'] * result_df['grp_otb_adr']
-        result_df['grp_opz_rev'] = result_df['grp_opz_rn'] * result_df['grp_opz_adr']
-        result_df['fcst_ind_rev'] = result_df['fcst_ind_rn'] * result_df['fcst_ind_adr']
-        
-        result_df['finale_rn'] = result_df['fcst_ind_rn'] + result_df['otb_ind_rn'] + result_df['grp_otb_rn']
-        result_df['finale_opz_rn'] = result_df['finale_rn'] + result_df['grp_opz_rn']
-        
-        result_df['finale_rev'] = result_df['otb_ind_rev'] + result_df['fcst_ind_rev'] + result_df['grp_otb_rev']
-        result_df['finale_adr'] = np.where(result_df['finale_rn'] > 0,
-                                       result_df['finale_rev'] / result_df['finale_rn'],
-                                       0)
-        
-        return result_df
-        
-    except Exception as e:
-        st.error(f"Errore nell'elaborazione dei file: {e}")
+        import traceback
+        st.code(traceback.format_exc())
         return None
 
 class ExcelCompatibleDisplacementAnalyzer:
@@ -1442,7 +1388,7 @@ class ExcelCompatibleDisplacementAnalyzer:
         return fig, fig_summary
 
 
-st.title("Hotel Group Displacement Analyzer v0.9.4r4")
+st.title("Hotel Group Displacement Analyzer v0.9.5r3")
 st.markdown("*Strumento di analisi richieste preventivo gruppi*")
 
 with st.sidebar:
@@ -1521,6 +1467,12 @@ analyzed_data = None
 start_date = None
 end_date = None
 
+# Gestione delle date di default
+if 'default_start_date' not in st.session_state:
+    st.session_state['default_start_date'] = None
+if 'default_end_date' not in st.session_state:
+    st.session_state['default_end_date'] = None
+
 if enable_booking_parser:
     with st.expander("💌 Analisi rapida richiesta booking", expanded=True):
         st.info("Incolla qui il testo della richiesta dell'ufficio booking per compilare automaticamente tutti i campi")
@@ -1550,32 +1502,28 @@ if enable_booking_parser:
                                 st.info("La data di partenza include il pernottamento (non è checkout)")
                     
                     if st.button("Conferma e utilizza questi dati", key="confirm_parsed_main_data"):
-                        if parsed_data['group_name']:
-                            st.session_state['parsed_group_name'] = parsed_data['group_name']
-                            st.session_state['group_name_input'] = parsed_data['group_name']
+                        # Usa ID univoco basato sul timestamp
+                        import_id = int(time.time() * 1000)
                         
+                        # Salva in session_state
+                        st.session_state['booking_data'] = {
+                            'group_name': parsed_data['group_name'],
+                            'arrival_date': parsed_data['arrival_date'],
+                            'departure_date': parsed_data['departure_date'],
+                            'num_rooms': parsed_data['num_rooms'],
+                            'timestamp': import_id
+                        }
+                        
+                        # Flag per forzare aggiornamento
+                        st.session_state['force_update'] = True
+                        
+                        # Imposta anche i valori di default per le date
                         if parsed_data['arrival_date']:
-                            st.session_state['parsed_arrival_date'] = parsed_data['arrival_date']
-                            st.session_state['parsed_start_date'] = parsed_data['arrival_date']
-                            st.session_state['start_date_input'] = parsed_data['arrival_date']
-                            st.session_state['arrival_date_input'] = parsed_data['arrival_date']
-                            st.session_state['Data di arrivo'] = parsed_data['arrival_date']
-                            st.session_state['Data inizio analisi'] = parsed_data['arrival_date']
+                            st.session_state['default_start_date'] = parsed_data['arrival_date']
+                            st.session_state['default_end_date'] = parsed_data['departure_date']
                         
-                        if parsed_data['departure_date']:
-                            st.session_state['parsed_departure_date'] = parsed_data['departure_date']
-                            st.session_state['parsed_end_date'] = parsed_data['departure_date']
-                            st.session_state['end_date_input'] = parsed_data['departure_date']
-                            st.session_state['departure_date_input'] = parsed_data['departure_date']
-                            st.session_state['Data di partenza'] = parsed_data['departure_date']
-                            st.session_state['Data fine analisi'] = parsed_data['departure_date']
-                        
-                        if parsed_data['num_rooms']:
-                            st.session_state['parsed_num_rooms'] = parsed_data['num_rooms']
-                            st.session_state['num_rooms_input'] = parsed_data['num_rooms']
-                            st.session_state['Numero camere ROH'] = parsed_data['num_rooms']
-                            st.session_state['Numero camere medio'] = parsed_data['num_rooms']
-                        
+                        st.success("Dati confermati! Aggiornamento in corso...")
+                        time.sleep(0.5)
                         st.experimental_rerun()
                 else:
                     st.warning("Non è stato possibile estrarre informazioni dalla richiesta. Verifica il formato del testo.")
@@ -1601,8 +1549,8 @@ if data_source == "Import file Excel":
                         }
                         
                         available_dates = pd.date_range(
-                            start=idv_cy_data['Giorno'].min(),
-                            end=idv_cy_data['Giorno'].max()
+                            start=idv_cy_data['data'].min(),
+                            end=idv_cy_data['data'].max()
                         )
                         st.session_state['available_dates'] = available_dates
                         
@@ -1617,23 +1565,27 @@ if data_source == "Import file Excel":
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    default_start = st.session_state.get('parsed_start_date', available_dates.min())
+                    # Usa la data dal parser booking se disponibile, altrimenti usa None
+                    start_date_default = st.session_state.get('default_start_date', available_dates.min())
+                    
                     start_date = st.date_input(
                         "Data inizio analisi", 
-                        value=default_start,
+                        value=start_date_default,
                         min_value=available_dates.min(),
                         max_value=available_dates.max(),
-                        key="start_date_input"
+                        key="start_date_fixed"
                     )
                 
                 with col2:
-                    default_end = st.session_state.get('parsed_end_date', available_dates.min() + timedelta(days=3))
+                    # Usa la data dal parser booking se disponibile, altrimenti usa None
+                    end_date_default = st.session_state.get('default_end_date', available_dates.min() + timedelta(days=3))
+                    
                     end_date = st.date_input(
                         "Data fine analisi", 
-                        value=default_end,
+                        value=end_date_default,
                         min_value=available_dates.min(),
                         max_value=available_dates.max(),
-                        key="end_date_input"
+                        key="end_date_fixed"
                     )
                 
                 if st.button("Carica dati per il periodo selezionato", type="primary"):
@@ -1655,7 +1607,9 @@ if data_source == "Import file Excel":
                             st.session_state['analyzed_data'] = processed_data
                             st.session_state['selected_start_date'] = start_date
                             st.session_state['selected_end_date'] = end_date
-                            st.rerun()
+                            st.success("Dati elaborati con successo!")
+                            time.sleep(0.5)
+                            st.experimental_rerun()
             
             if st.button("Cambia file", key="reset_excel_data"):
                 if 'raw_excel_data' in st.session_state:
@@ -1735,13 +1689,27 @@ if data_source == "Import file Excel":
 elif data_source == "Inserimento manuale":
     st.header("1️⃣ Periodo di Analisi")
     
+    # Funzioni callback per gestire i cambiamenti di date
+    def on_start_date_change():
+        st.session_state['default_start_date'] = st.session_state['start_date_fixed']
+    
+    def on_end_date_change():
+        st.session_state['default_end_date'] = st.session_state['end_date_fixed']
+    
     col1, col2 = st.columns(2)
     with col1:
-        default_start = st.session_state.get('parsed_start_date', datetime.now() + timedelta(days=30))
-        start_date = st.date_input("Data inizio analisi", value=default_start, key="start_date_input")
+        # Usa None come valore predefinito per evitare reset automatici
+        start_date = st.date_input("Data inizio analisi", 
+                                  value=st.session_state.get('default_start_date'), 
+                                  key="start_date_fixed",
+                                  on_change=on_start_date_change)
+    
     with col2:
-        default_end = st.session_state.get('parsed_end_date', datetime.now() + timedelta(days=33))
-        end_date = st.date_input("Data fine analisi", value=default_end, key="end_date_input")
+        # Usa None come valore predefinito per evitare reset automatici
+        end_date = st.date_input("Data fine analisi", 
+                               value=st.session_state.get('default_end_date'), 
+                               key="end_date_fixed",
+                               on_change=on_end_date_change)
     
     st.header("2️⃣ Dati On The Books e Forecast")
     
@@ -2020,6 +1988,7 @@ elif data_source == "Inserimento manuale":
             final_data['fcst_ind_rn'] = final_data['otb_ind_rn'] + st.session_state['pickup_value']
         else:  # LY - OTB (default)
             final_data['fcst_ind_rn'] = final_data['ly_ind_rn'] - final_data['otb_ind_rn']
+            final_data['fcst_ind_rn'] = final_data['fcst_ind_rn'].apply(lambda x: max(0, x))
        
         final_data['fcst_ind_adr'] = final_data['otb_ind_adr']
        
@@ -2096,16 +2065,36 @@ elif data_source == "Inserimento manuale":
             st.error(f"Errore nel calcolo del forecast: {e}")
         analyzed_data = None
 
+    # Pulsante per avviare l'analisi dei dati manuali
+    if data_source == "Inserimento manuale" and analyzed_data is not None:
+        if not enable_wizard or st.session_state.get('wizard_step') == 6:
+            st.markdown("---")
+            st.subheader("Avvia l'analisi")
+            st.info("Hai inserito tutti i dati necessari. Clicca sul pulsante per procedere con l'analisi.")
+            
+            if st.button("✅ Avvia Analisi dei Dati Inseriti", type="primary", use_container_width=True):
+                st.session_state['analyzed_data'] = analyzed_data
+                st.session_state['selected_start_date'] = start_date
+                st.session_state['selected_end_date'] = end_date
+                st.session_state['analysis_phase'] = 'verify'
+                st.success("Dati elaborati con successo! Passaggio alla fase di analisi...")
+                time.sleep(0.5)
+                st.experimental_rerun()
+
 if start_date is None or end_date is None:
     st.header("1️⃣ Periodo di Analisi")
     
     col1, col2 = st.columns(2)
     with col1:
-        default_start = st.session_state.get('parsed_start_date', datetime.now() + timedelta(days=30))
-        start_date = st.date_input("Data inizio analisi", value=default_start, key="start_date_input")
+        start_date = st.date_input("Data inizio analisi", 
+                                 value=st.session_state.get('default_start_date'), 
+                                 key="start_date_default",
+                                 on_change=on_start_date_change)
     with col2:
-        default_end = st.session_state.get('parsed_end_date', datetime.now() + timedelta(days=33))
-        end_date = st.date_input("Data fine analisi", value=default_end, key="end_date_input")
+        end_date = st.date_input("Data fine analisi", 
+                               value=st.session_state.get('default_end_date'), 
+                               key="end_date_default",
+                               on_change=on_end_date_change)
 elif data_source == "Import file Excel" and 'analyzed_data' in st.session_state:
     st.header("1️⃣ Periodo di Analisi")
     st.info(f"Periodo di analisi: dal {start_date.strftime('%d/%m/%Y')} al {end_date.strftime('%d/%m/%Y')}")
@@ -2114,8 +2103,27 @@ st.header("3️⃣ Dettagli Richiesta Gruppo")
 
 col1, col2 = st.columns(2)
 with col1:
-    default_group_name = st.session_state.get('parsed_group_name', "Corporate Meeting")
-    group_name = st.text_input("Nome Gruppo", value=default_group_name, key="group_name_input")
+    # Verifica se abbiamo dati dal booking parser
+    has_booking_data = 'booking_data' in st.session_state and 'force_update' in st.session_state and st.session_state['force_update']
+    
+    # Placeholder per messaggi
+    confirm_placeholder = st.empty()
+    
+    if has_booking_data:
+        with confirm_placeholder:
+            st.success("✅ Dati dal parser booking applicati correttamente!")
+        
+        # Dopo aver mostrato il messaggio, rimuoviamo il flag
+        st.session_state['force_update'] = False
+    
+    # Nome gruppo
+    default_group_name = "Corporate Meeting"
+    if has_booking_data and 'group_name' in st.session_state['booking_data']:
+        default_group_name = st.session_state['booking_data']['group_name']
+    
+    group_name = st.text_input("Nome Gruppo", 
+                              value=default_group_name,
+                              key="group_name_fixed")
     
     st.subheader("Configurazione Camere")
     
@@ -2127,21 +2135,30 @@ with col1:
     )
     
     if room_config_option == "Contingente fisso ROH":
-        default_num_rooms = st.session_state.get('parsed_num_rooms', 25)
-        num_rooms = st.number_input("Numero camere ROH", min_value=1, value=default_num_rooms, key="num_rooms_input")
+        default_num_rooms = 25
+        if has_booking_data and 'num_rooms' in st.session_state['booking_data']:
+            default_num_rooms = st.session_state['booking_data']['num_rooms']
+        
+        num_rooms = st.number_input("Numero camere ROH", min_value=1, value=default_num_rooms)
         room_types = [{"tipo": "ROH", "numero": num_rooms, "adr_addon": 0.0}]
         
     elif room_config_option == "Camere variabili per giorno":
         st.info("Aggiungi dettagli specifici per giorno nella sezione sottostante")
-        default_num_rooms = st.session_state.get('parsed_num_rooms', 25)
-        num_rooms = st.number_input("Numero camere medio", min_value=1, value=default_num_rooms, key="num_rooms_input")
+        default_num_rooms = 25
+        if has_booking_data and 'num_rooms' in st.session_state['booking_data']:
+            default_num_rooms = st.session_state['booking_data']['num_rooms']
+        
+        num_rooms = st.number_input("Numero camere medio", min_value=1, value=default_num_rooms)
         room_types = [{"tipo": "ROH", "numero": num_rooms, "adr_addon": 0.0}]
         
     elif room_config_option == "Multiple tipologie":
         st.subheader("Tipologie di camere")
         
+        default_num_rooms = 25
+        if has_booking_data and 'num_rooms' in st.session_state['booking_data']:
+            default_num_rooms = st.session_state['booking_data']['num_rooms']
+        
         if 'room_types_df' not in st.session_state:
-            default_num_rooms = st.session_state.get('parsed_num_rooms', 25)
             st.session_state.room_types_df = pd.DataFrame({
                 'tipo': ['ROH', 'Superior', 'Deluxe'],
                 'numero': [max(default_num_rooms-10, 15), 8, 2],
@@ -2168,11 +2185,18 @@ with col1:
         
         room_types = edited_types.to_dict('records')
     
-    default_arrival = st.session_state.get('parsed_arrival_date', start_date)
-    group_arrival = st.date_input("Data di arrivo", value=default_arrival, key="arrival_date_input")
+    # Date di gruppo
+    default_arrival = start_date
+    if has_booking_data and 'arrival_date' in st.session_state['booking_data']:
+        default_arrival = st.session_state['booking_data']['arrival_date']
     
-    default_departure = st.session_state.get('parsed_departure_date', end_date)
-    group_departure = st.date_input("Data di partenza", value=default_departure, key="departure_date_input")
+    group_arrival = st.date_input("Data di arrivo", value=default_arrival, key="arrival_date_fixed")
+    
+    default_departure = end_date
+    if has_booking_data and 'departure_date' in st.session_state['booking_data']:
+        default_departure = st.session_state['booking_data']['departure_date']
+    
+    group_departure = st.date_input("Data di partenza", value=default_departure, key="departure_date_fixed")
     
 with col2:
     adr_lordo = st.number_input("ADR base proposta (€ lordi)", min_value=0.0, value=900.0, key="adr_lordo_input")
@@ -2912,8 +2936,8 @@ else:
                     next_start_date = group_departure
                     next_end_date = next_start_date + timedelta(days=date_nights)
                     
-                    st.session_state['next_start_date'] = next_start_date
-                    st.session_state['next_end_date'] = next_end_date
+                    st.session_state['default_start_date'] = next_start_date
+                    st.session_state['default_end_date'] = next_end_date
                 else:
                     st.session_state['series_complete'] = True
                 st.rerun()
@@ -3041,7 +3065,7 @@ st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Hotel Group Displacement Analyzer | v0.9.4r4 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
+       <p>Hotel Group Displacement Analyzer | v0.9.5r3 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}<br>
        Distributed under MIT License
        </p>
