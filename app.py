@@ -15,7 +15,7 @@ import json
 import os
 import xlsxwriter
 
-st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.4", layout="wide")
+st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.4r2", layout="wide")
 
 COLOR_PALETTE = {
     "primary": "#D8C0B7",
@@ -90,7 +90,8 @@ def parse_booking_request(text):
         r'nome\s+agenzia\s*:\s*([^\n]+)',
         r'agenzia\s*:\s*([^\n]+)',
         r'gruppo\s*:\s*([^\n]+)',
-        r'nome\s+gruppo\s*:\s*([^\n]+)'
+        r'nome\s+gruppo\s*:\s*([^\n]+)',
+        r'agenzia[\s:]+([^\n,]+)'
     ]
     
     for pattern in agency_patterns:
@@ -144,12 +145,17 @@ def load_changelog():
     except FileNotFoundError:
         return """# Changelog Hotel Group Displacement Analyzer
 
-## v0.9.4 (Attuale)
+## v0.9.4r2 (Attuale)
+- **Miglioramento UI**: Corretti problemi di visualizzazione nel login
+- **Bugfix**: Risolto problema con la visualizzazione del changelog
+- **Miglioramento UX**: Il parser delle richieste ora compila anche le date di analisi
+
+## v0.9.4 (Precedente)
 - **Nuova funzionalità**: Parsing automatico delle richieste di booking
 - **Correzioni**: Risolti problemi di indentazione nel codice
 - **Miglioramento UI**: Aggiunta validazione per i dati estratti automaticamente
 
-## v0.9.3r3 (Precedente)
+## v0.9.3r3
 - **Miglioramento UI**: Aggiunta la possibilità di configurare camere variabili per giorno
 - **Miglioramento UI**: Aggiunto supporto per multiple tipologie di camera con supplementi
 - **Miglioramento UX**: I dati inseriti sono ora più evidenti nell'interfaccia
@@ -217,28 +223,30 @@ def authenticate():
                 return False
         return True
     
-    col1, col2, col3 = st.columns([1, 2, 1])
+    st.markdown("""
+    <div style="display: flex; justify-content: center; align-items: center; flex-direction: column; margin-bottom: 20px;">
+        <img src="https://www.revguardian.altervista.org/hgd.logo.png" style="width: 200px; margin-bottom: 10px;">
+        <p style="text-align: center; margin: 0;">v0.9.4r2</p>
+        <p style="text-align: center; margin-top: 10px;">Accedi per continuare</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
-        try:
-            logo_url = "https://www.revguardian.altervista.org/hgd.logo.png"
-            st.image(logo_url, width=200)
-        except:
-            st.error("Impossibile caricare il logo")
-            
-        st.markdown("<p style='text-align: center;'>v0.9.4</p>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center;'>Accedi per continuare</p>", unsafe_allow_html=True)
-        
         if st.button("📋 What's New", key="whats_new_btn"):
             st.session_state['show_changelog'] = True
     
     if 'show_changelog' in st.session_state and st.session_state['show_changelog']:
-        with st.dialog("Changelog - Novità della versione"):
-            changelog_content = load_changelog()
-            st.markdown(changelog_content)
-            
-            if st.button("Chiudi", key="close_changelog"):
-                st.session_state['show_changelog'] = False
-                st.rerun()
+        try:
+            with st.expander("Changelog - Novità della versione", expanded=True):
+                changelog_content = load_changelog()
+                st.markdown(changelog_content)
+                
+                if st.button("Chiudi", key="close_changelog"):
+                    st.session_state['show_changelog'] = False
+                    st.rerun()
+        except Exception as e:
+            st.error(f"Errore durante la visualizzazione del changelog: {e}")
     
     try:
         valid_usernames = st.secrets.credentials.usernames
@@ -1424,7 +1432,7 @@ class ExcelCompatibleDisplacementAnalyzer:
         return fig, fig_summary
 
 
-st.title("Hotel Group Displacement Analyzer v0.9.4")
+st.title("Hotel Group Displacement Analyzer v0.9.4r2")
 st.markdown("*Strumento di analisi richieste preventivo gruppi*")
 
 with st.sidebar:
@@ -1469,6 +1477,8 @@ with st.sidebar:
     st.header("Impostazioni")
     enable_wizard = st.toggle("Modalità Wizard (guida passo-passo)", value=False, 
                            help="Attiva la guida passo-passo per l'inserimento dei dati")
+    enable_booking_parser = st.toggle("Parsing automatico richieste booking", value=True,
+                                   help="Estrae automaticamente dati dalle richieste dell'ufficio booking")
     
     st.header("Tipo di Analisi")
     enable_series = st.toggle("Serie di Gruppi", value=False, 
@@ -1500,6 +1510,50 @@ else:
 analyzed_data = None
 start_date = None
 end_date = None
+
+if enable_booking_parser:
+    with st.expander("💌 Analisi rapida richiesta booking", expanded=True):
+        st.info("Incolla qui il testo della richiesta dell'ufficio booking per compilare automaticamente tutti i campi")
+        booking_text = st.text_area("Testo richiesta", height=150, 
+                                  placeholder="Esempio: Dal 25 marzo al 30 maggio 2025, nome agenzia: Example Tours, 25 camere")
+        
+        if booking_text and st.button("Analizza richiesta", key="parse_booking_main_btn"):
+            with st.spinner("Analisi in corso..."):
+                parsed_data = parse_booking_request(booking_text)
+                
+                if any(v is not None for v in parsed_data.values()):
+                    st.success("Dati estratti dalla richiesta:")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if parsed_data['group_name']:
+                            st.info(f"**Nome gruppo:** {parsed_data['group_name']}")
+                        if parsed_data['num_rooms']:
+                            st.info(f"**Numero camere:** {parsed_data['num_rooms']}")
+                    
+                    with col2:
+                        if parsed_data['arrival_date']:
+                            st.info(f"**Data arrivo:** {parsed_data['arrival_date'].strftime('%d/%m/%Y')}")
+                        if parsed_data['departure_date']:
+                            st.info(f"**Data partenza:** {parsed_data['departure_date'].strftime('%d/%m/%Y')}")
+                            if not parsed_data['is_checkout']:
+                                st.info("La data di partenza include il pernottamento (non è checkout)")
+                    
+                    if st.button("Conferma e utilizza questi dati", key="confirm_parsed_main_data"):
+                        if parsed_data['group_name']:
+                            st.session_state['parsed_group_name'] = parsed_data['group_name']
+                        if parsed_data['arrival_date']:
+                            st.session_state['parsed_arrival_date'] = parsed_data['arrival_date']
+                            st.session_state['parsed_start_date'] = parsed_data['arrival_date']
+                        if parsed_data['departure_date']:
+                            st.session_state['parsed_departure_date'] = parsed_data['departure_date']
+                            st.session_state['parsed_end_date'] = parsed_data['departure_date']
+                        if parsed_data['num_rooms']:
+                            st.session_state['parsed_num_rooms'] = parsed_data['num_rooms']
+                        
+                        st.experimental_rerun()
+                else:
+                    st.warning("Non è stato possibile estrarre informazioni dalla richiesta. Verifica il formato del testo.")
 
 if data_source == "Import file Excel":
     with st.expander("Caricamento file", expanded=True):
@@ -1538,17 +1592,19 @@ if data_source == "Import file Excel":
                 
                 col1, col2 = st.columns(2)
                 with col1:
+                    default_start = st.session_state.get('parsed_start_date', available_dates.min())
                     start_date = st.date_input(
                         "Data inizio analisi", 
-                        value=available_dates.min(),
+                        value=default_start,
                         min_value=available_dates.min(),
                         max_value=available_dates.max()
                     )
                 
                 with col2:
+                    default_end = st.session_state.get('parsed_end_date', available_dates.min() + timedelta(days=3))
                     end_date = st.date_input(
                         "Data fine analisi", 
-                        value=available_dates.min() + timedelta(days=3),
+                        value=default_end,
                         min_value=available_dates.min(),
                         max_value=available_dates.max()
                     )
@@ -1654,9 +1710,11 @@ elif data_source == "Inserimento manuale":
     
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Data inizio analisi", value=datetime.now() + timedelta(days=30))
+        default_start = st.session_state.get('parsed_start_date', datetime.now() + timedelta(days=30))
+        start_date = st.date_input("Data inizio analisi", value=default_start)
     with col2:
-        end_date = st.date_input("Data fine analisi", value=datetime.now() + timedelta(days=33))
+        default_end = st.session_state.get('parsed_end_date', datetime.now() + timedelta(days=33))
+        end_date = st.date_input("Data fine analisi", value=default_end)
     
     st.header("2️⃣ Dati On The Books e Forecast")
     
@@ -2016,58 +2074,16 @@ if start_date is None or end_date is None:
     
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Data inizio analisi", value=datetime.now() + timedelta(days=30))
+        default_start = st.session_state.get('parsed_start_date', datetime.now() + timedelta(days=30))
+        start_date = st.date_input("Data inizio analisi", value=default_start)
     with col2:
-        end_date = st.date_input("Data fine analisi", value=datetime.now() + timedelta(days=33))
+        default_end = st.session_state.get('parsed_end_date', datetime.now() + timedelta(days=33))
+        end_date = st.date_input("Data fine analisi", value=default_end)
 elif data_source == "Import file Excel" and 'analyzed_data' in st.session_state:
     st.header("1️⃣ Periodo di Analisi")
     st.info(f"Periodo di analisi: dal {start_date.strftime('%d/%m/%Y')} al {end_date.strftime('%d/%m/%Y')}")
 
 st.header("3️⃣ Dettagli Richiesta Gruppo")
-
-# Nuova funzionalità: Parsing automatico delle richieste di booking
-with st.expander("Inserimento rapido da richiesta booking", expanded=True):
-    st.info("Incolla qui il testo della richiesta ricevuta dall'ufficio booking per compilare automaticamente i campi")
-    booking_text = st.text_area("Testo richiesta", height=150, 
-                               placeholder="Esempio: Dal 25 marzo al 30 maggio 2025, nome agenzia: Example Tours, 25 camere")
-    
-    if booking_text and st.button("Analizza richiesta", key="parse_booking_btn"):
-        with st.spinner("Analisi in corso..."):
-            parsed_data = parse_booking_request(booking_text)
-            
-            # Mostra i dati estratti per conferma
-            if any(v is not None for v in parsed_data.values()):
-                st.success("Dati estratti dalla richiesta:")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    if parsed_data['group_name']:
-                        st.info(f"**Nome gruppo:** {parsed_data['group_name']}")
-                    if parsed_data['num_rooms']:
-                        st.info(f"**Numero camere:** {parsed_data['num_rooms']}")
-                
-                with col2:
-                    if parsed_data['arrival_date']:
-                        st.info(f"**Data arrivo:** {parsed_data['arrival_date'].strftime('%d/%m/%Y')}")
-                    if parsed_data['departure_date']:
-                        st.info(f"**Data partenza:** {parsed_data['departure_date'].strftime('%d/%m/%Y')}")
-                        if not parsed_data['is_checkout']:
-                            st.info("La data di partenza include il pernottamento (non è checkout)")
-                
-                if st.button("Conferma e utilizza questi dati", key="confirm_parsed_data"):
-                    # Salva i dati nella session_state per utilizzarli dopo
-                    if parsed_data['group_name']:
-                        st.session_state['parsed_group_name'] = parsed_data['group_name']
-                    if parsed_data['arrival_date']:
-                        st.session_state['parsed_arrival_date'] = parsed_data['arrival_date']
-                    if parsed_data['departure_date']:
-                        st.session_state['parsed_departure_date'] = parsed_data['departure_date']
-                    if parsed_data['num_rooms']:
-                        st.session_state['parsed_num_rooms'] = parsed_data['num_rooms']
-                    
-                    st.rerun()
-            else:
-                st.warning("Non è stato possibile estrarre informazioni dalla richiesta. Verifica il formato del testo o inserisci i dati manualmente.")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -2998,7 +3014,7 @@ st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Hotel Group Displacement Analyzer | v0.9.4 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
+       <p>Hotel Group Displacement Analyzer | v0.9.4r2 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}<br>
        Distributed under MIT License
        </p>
