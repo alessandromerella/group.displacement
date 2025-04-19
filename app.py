@@ -2378,7 +2378,8 @@ else:
             if confirm:
                 st.session_state['analysis_phase'] = 'analysis'
                 st.rerun()
-elif st.session_state['analysis_phase'] == 'analysis':
+                
+    elif st.session_state['analysis_phase'] == 'analysis':
         with st.spinner("Elaborazione in corso..."):
             analyzer = ExcelCompatibleDisplacementAnalyzer(hotel_capacity=hotel_capacity, iva_rate=iva_rate)
             
