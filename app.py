@@ -16,7 +16,7 @@ import os
 import xlsxwriter
 import traceback
 
-st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.5r6", layout="wide")
+st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.5r7", layout="wide")
 
 COLOR_PALETTE = {
     "primary": "#D8C0B7",
@@ -77,6 +77,10 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 """
+
+if 'force_update_fields' in st.session_state and st.session_state['force_update_fields']:
+    st.session_state['force_update_fields'] = False
+    st.success("✅ Campi aggiornati con i dati estratti")
 
 def parse_booking_request(text):
     results = {
@@ -173,11 +177,16 @@ def load_changelog():
     except FileNotFoundError:
         return """# Changelog Hotel Group Displacement Analyzer
 
-## v0.9.5r6 (Attuale)
+## v0.9.5r7 (Attuale)
+- **Bugfix**: Risolto problema di propagazione dati dall'analisi booking ai campi di input
+- **UX**: Migliorato feedback visivo nel processo di estrazione dati
+- **Performance**: Ottimizzato il ciclo di aggiornamento dell'interfaccia
+
+## v0.9.5r6 (Precedente)
 - **Bugfix**: Risolto bug nella propagazione dei dati del parser booking
 - **UX**: Migliorata coerenza nei campi di inserimento date e dati gruppo
 
-## v0.9.5r5 (Precedente)
+## v0.9.5r5
 - **Bugfix**: Risolto problema DatetimeIndex in analisi tipologie camere
 - **Bugfix**: Migliorata gestione delle date nel parser richieste booking 
 - **Miglioramento UX**: Correzione persistenza dati tra sessioni
@@ -201,7 +210,7 @@ def authenticate():
     st.markdown("""
     <div style="display: flex; justify-content: center; align-items: center; flex-direction: column; margin-bottom: 20px;">
         <img src="https://www.revguardian.altervista.org/hgd.logo.png" style="width: 200px; margin-bottom: 10px;">
-        <p style="text-align: center; margin: 0;">v0.9.5r6</p>
+        <p style="text-align: center; margin: 0;">v0.9.5r7</p>
         <p style="text-align: center; margin-top: 10px;">Accedi per continuare</p>
     </div>
     """, unsafe_allow_html=True)
@@ -718,9 +727,9 @@ def process_imported_data(idv_cy_data, idv_ly_data, grp_otb_data, grp_opz_data, 
         return None
 
 def get_booking_data():
-    if 'parsed_booking_data' in st.session_state:
+    if 'booking_data_json' in st.session_state:
         try:
-            data = st.session_state['parsed_booking_data']
+            data = json.loads(st.session_state['booking_data_json'])
             
             if data.get('arrival_date'):
                 data['arrival_date'] = datetime.strptime(data['arrival_date'], '%Y-%m-%d').date()
@@ -1385,7 +1394,7 @@ class ExcelCompatibleDisplacementAnalyzer:
         return fig, fig_summary
 
 
-st.title("Hotel Group Displacement Analyzer v0.9.5r6")
+st.title("Hotel Group Displacement Analyzer v0.9.5r7")
 st.markdown("*Strumento di analisi richieste preventivo gruppi*")
 
 with st.sidebar:
@@ -1494,16 +1503,16 @@ if enable_booking_parser:
                     
                     if st.button("Conferma e utilizza questi dati", key="confirm_parsed_main_data"):
                         try:
-                            # Salva i dati estratti in session_state
-                            st.session_state['parsed_booking_data'] = {
+                            st.session_state['force_update_fields'] = True
+                            
+                            st.session_state['booking_data_json'] = json.dumps({
                                 'group_name': parsed_data['group_name'],
                                 'arrival_date': parsed_data['arrival_date'].strftime('%Y-%m-%d') if parsed_data['arrival_date'] else None,
                                 'departure_date': parsed_data['departure_date'].strftime('%Y-%m-%d') if parsed_data['departure_date'] else None,
                                 'num_rooms': parsed_data['num_rooms'],
                                 'timestamp': int(time.time())
-                            }
+                            })
                             
-                            # Imposta i valori direttamente nelle chiavi utilizzate dai widget
                             if parsed_data['arrival_date']:
                                 st.session_state['start_date_input'] = parsed_data['arrival_date']
                             if parsed_data['departure_date']:
@@ -1512,8 +1521,8 @@ if enable_booking_parser:
                                 st.session_state['group_name_input'] = parsed_data['group_name']
                             if parsed_data['num_rooms']:
                                 st.session_state['num_rooms_input'] = parsed_data['num_rooms']
-                                
-                            st.success("Dati confermati! Aggiornamento in corso...")
+                            
+                            st.success("Dati confermati! Chiudi questa finestra e controlla i campi.")
                             time.sleep(0.5)
                             st.rerun()
                         except Exception as e:
@@ -1657,7 +1666,7 @@ if data_source == "Import file Excel":
                     "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
                     "giorno": "Giorno",
                     "otb_ind_adr": st.column_config.NumberColumn("OTB IND", format="€%.2f"),
-                    "ly_ind_adr": st.column_config.NumberColumn("LY IND", format="€%.2f"),
+"ly_ind_adr": st.column_config.NumberColumn("LY IND", format="€%.2f"),
                     "fcst_ind_adr": st.column_config.NumberColumn("FCST IND", format="€%.2f"),
                     "grp_otb_adr": st.column_config.NumberColumn("GRP OTB", format="€%.2f"),
                     "grp_opz_adr": st.column_config.NumberColumn("GRP OPZ", format="€%.2f"),
@@ -3053,7 +3062,7 @@ st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Hotel Group Displacement Analyzer | v0.9.5r6 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
+       <p>Hotel Group Displacement Analyzer | v0.9.5r7 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}<br>
        Distributed under MIT License
        </p>
