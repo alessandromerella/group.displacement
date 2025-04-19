@@ -1711,7 +1711,7 @@ elif data_source == "Inserimento manuale":
     def on_end_date_change():
         st.session_state['end_date_fixed'] = st.session_state['end_date_input']
     
-col1, col2 = st.columns(2)
+    col1, col2 = st.columns(2)
     with col1:
         start_date_default = st.session_state.get('start_date_fixed', datetime.now() + timedelta(days=30))
         if isinstance(start_date_default, str):
