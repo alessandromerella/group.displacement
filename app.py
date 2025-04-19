@@ -16,7 +16,7 @@ import os
 import xlsxwriter
 import traceback
 
-st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.5r7", layout="wide")
+st.set_page_config(page_title="Hotel Groups Displacement Analyzer v0.9.5r8", layout="wide")
 
 COLOR_PALETTE = {
     "primary": "#D8C0B7",
@@ -177,12 +177,18 @@ def load_changelog():
     except FileNotFoundError:
         return """# Changelog Hotel Group Displacement Analyzer
 
-## v0.9.5r7 (Attuale)
+## v0.9.5r8 (Attuale)
+- **UX**: Migliorata visualizzazione date in formato italiano (DD/MM/YYYY)
+- **Bugfix**: Risolto problema di aggiornamento campi dopo il parsing della richiesta
+- **UX**: Migliorata terminologia con "Tipologie multiple" invece di "Multiple tipologie"
+- **Performance**: Ottimizzazione sincronizzazione stato applicazione
+
+## v0.9.5r7 (Precedente)
 - **Bugfix**: Risolto problema di propagazione dati dall'analisi booking ai campi di input
 - **UX**: Migliorato feedback visivo nel processo di estrazione dati
 - **Performance**: Ottimizzato il ciclo di aggiornamento dell'interfaccia
 
-## v0.9.5r6 (Precedente)
+## v0.9.5r6
 - **Bugfix**: Risolto bug nella propagazione dei dati del parser booking
 - **UX**: Migliorata coerenza nei campi di inserimento date e dati gruppo
 
@@ -210,7 +216,7 @@ def authenticate():
     st.markdown("""
     <div style="display: flex; justify-content: center; align-items: center; flex-direction: column; margin-bottom: 20px;">
         <img src="https://www.revguardian.altervista.org/hgd.logo.png" style="width: 200px; margin-bottom: 10px;">
-        <p style="text-align: center; margin: 0;">v0.9.5r7</p>
+        <p style="text-align: center; margin: 0;">v0.9.5r8</p>
         <p style="text-align: center; margin-top: 10px;">Accedi per continuare</p>
     </div>
     """, unsafe_allow_html=True)
@@ -1394,7 +1400,7 @@ class ExcelCompatibleDisplacementAnalyzer:
         return fig, fig_summary
 
 
-st.title("Hotel Group Displacement Analyzer v0.9.5r7")
+st.title("Hotel Group Displacement Analyzer v0.9.5r8")
 st.markdown("*Strumento di analisi richieste preventivo gruppi*")
 
 with st.sidebar:
@@ -1503,28 +1509,29 @@ if enable_booking_parser:
                     
                     if st.button("Conferma e utilizza questi dati", key="confirm_parsed_main_data"):
                         try:
-                            st.session_state['force_update_fields'] = True
-                            
-                            st.session_state['booking_data_json'] = json.dumps({
-                                'group_name': parsed_data['group_name'],
-                                'arrival_date': parsed_data['arrival_date'].strftime('%Y-%m-%d') if parsed_data['arrival_date'] else None,
-                                'departure_date': parsed_data['departure_date'].strftime('%Y-%m-%d') if parsed_data['departure_date'] else None,
-                                'num_rooms': parsed_data['num_rooms'],
-                                'timestamp': int(time.time())
-                            })
-                            
                             if parsed_data['arrival_date']:
+                                st.session_state['arrival_date_direct'] = parsed_data['arrival_date']
                                 st.session_state['start_date_input'] = parsed_data['arrival_date']
+                            
                             if parsed_data['departure_date']:
+                                st.session_state['departure_date_direct'] = parsed_data['departure_date']
                                 st.session_state['end_date_input'] = parsed_data['departure_date']
+                            
                             if parsed_data['group_name']:
+                                st.session_state['group_name_direct'] = parsed_data['group_name']
                                 st.session_state['group_name_input'] = parsed_data['group_name']
+                            
                             if parsed_data['num_rooms']:
+                                st.session_state['num_rooms_direct'] = parsed_data['num_rooms']
                                 st.session_state['num_rooms_input'] = parsed_data['num_rooms']
                             
-                            st.success("Dati confermati! Chiudi questa finestra e controlla i campi.")
-                            time.sleep(0.5)
-                            st.rerun()
+                            st.session_state['booking_update_timestamp'] = time.time()
+                            
+                            st.success(f"✅ Dati aggiornati: {parsed_data['group_name']} - {parsed_data['num_rooms']} camere - {parsed_data['arrival_date'].strftime('%d/%m/%Y')} al {parsed_data['departure_date'].strftime('%d/%m/%Y')}")
+                            
+                            with st.spinner("Aggiornamento campi..."):
+                                time.sleep(0.5)
+                                st.rerun()
                         except Exception as e:
                             st.error(f"Errore nel salvataggio dei dati: {e}")
                             st.code(traceback.format_exc())
@@ -1579,7 +1586,8 @@ if data_source == "Import file Excel":
                         value=st.session_state.get('start_date_input', available_dates.min()),
                         min_value=available_dates.min(),
                         max_value=available_dates.max(),
-                        key="start_date_input"
+                        key="start_date_input",
+                        format="DD/MM/YYYY"
                     )
                 
                 with col2:
@@ -1588,7 +1596,8 @@ if data_source == "Import file Excel":
                         value=st.session_state.get('end_date_input', available_dates.min() + timedelta(days=3)),
                         min_value=available_dates.min(),
                         max_value=available_dates.max(),
-                        key="end_date_input"
+                        key="end_date_input",
+                        format="DD/MM/YYYY"
                     )
                 
                 if st.button("Carica dati per il periodo selezionato", type="primary"):
@@ -1666,7 +1675,7 @@ if data_source == "Import file Excel":
                     "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
                     "giorno": "Giorno",
                     "otb_ind_adr": st.column_config.NumberColumn("OTB IND", format="€%.2f"),
-"ly_ind_adr": st.column_config.NumberColumn("LY IND", format="€%.2f"),
+                    "ly_ind_adr": st.column_config.NumberColumn("LY IND", format="€%.2f"),
                     "fcst_ind_adr": st.column_config.NumberColumn("FCST IND", format="€%.2f"),
                     "grp_otb_adr": st.column_config.NumberColumn("GRP OTB", format="€%.2f"),
                     "grp_opz_adr": st.column_config.NumberColumn("GRP OPZ", format="€%.2f"),
@@ -1705,14 +1714,16 @@ elif data_source == "Inserimento manuale":
         start_date = st.date_input(
             "Data inizio analisi", 
             value=st.session_state.get('start_date_input', datetime.now() + timedelta(days=30)),
-            key="start_date_input"
+            key="start_date_input",
+            format="DD/MM/YYYY"
         )
     
     with col2:
         end_date = st.date_input(
             "Data fine analisi", 
             value=st.session_state.get('end_date_input', datetime.now() + timedelta(days=33)),
-            key="end_date_input"
+            key="end_date_input",
+            format="DD/MM/YYYY"
         )
     
     st.header("2️⃣ Dati On The Books e Forecast")
@@ -2084,13 +2095,15 @@ if start_date is None or end_date is None:
         start_date = st.date_input(
             "Data inizio analisi", 
             value=st.session_state.get('start_date_input', datetime.now() + timedelta(days=30)),
-            key="start_date_input"
+            key="start_date_input",
+            format="DD/MM/YYYY"
         )
     with col2:
         end_date = st.date_input(
             "Data fine analisi", 
             value=st.session_state.get('end_date_input', datetime.now() + timedelta(days=33)),
-            key="end_date_input"
+            key="end_date_input",
+            format="DD/MM/YYYY"
         )
 elif data_source == "Import file Excel" and 'analyzed_data' in st.session_state:
     st.header("1️⃣ Periodo di Analisi")
@@ -2104,7 +2117,9 @@ col1, col2 = st.columns(2)
 with col1:
     group_name = st.text_input(
         "Nome Gruppo", 
-        value=st.session_state.get('group_name_input', booking_data.get('group_name', "Corporate Meeting") if booking_data else "Corporate Meeting"),
+        value=st.session_state.get('group_name_direct', 
+            st.session_state.get('group_name_input', 
+            booking_data.get('group_name', "Corporate Meeting") if booking_data else "Corporate Meeting")),
         key="group_name_input"
     )
     
@@ -2112,7 +2127,7 @@ with col1:
     
     room_config_option = st.radio(
         "Configurazione camere",
-        options=["Contingente fisso ROH", "Camere variabili per giorno", "Multiple tipologie"],
+        options=["Contingente fisso ROH", "Camere variabili per giorno", "Tipologie multiple"],
         index=0,
         help="Scegli come configurare l'offerta di camere per questo gruppo"
     )
@@ -2121,7 +2136,9 @@ with col1:
         num_rooms = st.number_input(
             "Numero camere ROH", 
             min_value=1, 
-            value=st.session_state.get('num_rooms_input', booking_data.get('num_rooms', 25) if booking_data else 25),
+            value=st.session_state.get('num_rooms_direct',
+                st.session_state.get('num_rooms_input', 
+                booking_data.get('num_rooms', 25) if booking_data else 25)),
             key="num_rooms_input"
         )
         room_types = [{"tipo": "ROH", "numero": num_rooms, "adr_addon": 0.0}]
@@ -2131,16 +2148,20 @@ with col1:
         num_rooms = st.number_input(
             "Numero camere medio", 
             min_value=1, 
-            value=st.session_state.get('num_rooms_input', booking_data.get('num_rooms', 25) if booking_data else 25),
+            value=st.session_state.get('num_rooms_direct',
+                st.session_state.get('num_rooms_input', 
+                booking_data.get('num_rooms', 25) if booking_data else 25)),
             key="num_rooms_input"
         )
         room_types = [{"tipo": "ROH", "numero": num_rooms, "adr_addon": 0.0}]
         
-    elif room_config_option == "Multiple tipologie":
+    elif room_config_option == "Tipologie multiple":
         st.subheader("Tipologie di camere")
         
         if 'room_types_df' not in st.session_state:
-            default_num_rooms = st.session_state.get('num_rooms_input', booking_data.get('num_rooms', 25) if booking_data else 25)
+            default_num_rooms = st.session_state.get('num_rooms_direct',
+                st.session_state.get('num_rooms_input', 
+                booking_data.get('num_rooms', 25) if booking_data else 25))
             st.session_state.room_types_df = pd.DataFrame({
                 'tipo': ['ROH', 'Superior', 'Deluxe'],
                 'numero': [max(default_num_rooms-10, 15), 8, 2],
@@ -2169,14 +2190,20 @@ with col1:
     
     group_arrival = st.date_input(
         "Data di arrivo", 
-        value=st.session_state.get('start_date_input', booking_data.get('arrival_date', start_date) if booking_data else start_date),
-        key="arrival_date_input"
+        value=st.session_state.get('arrival_date_direct',
+            st.session_state.get('start_date_input', 
+            booking_data.get('arrival_date', start_date) if booking_data else start_date)),
+        key="arrival_date_input",
+        format="DD/MM/YYYY"
     )
     
     group_departure = st.date_input(
         "Data di partenza", 
-        value=st.session_state.get('end_date_input', booking_data.get('departure_date', end_date) if booking_data else end_date),
-        key="departure_date_input"
+        value=st.session_state.get('departure_date_direct',
+            st.session_state.get('end_date_input', 
+            booking_data.get('departure_date', end_date) if booking_data else end_date)),
+        key="departure_date_input",
+        format="DD/MM/YYYY"
     )
     
 with col2:
@@ -2184,7 +2211,7 @@ with col2:
     adr_netto = adr_lordo / (1 + iva_rate)
     st.info(f"ADR netto base: €{adr_netto:.2f}")
     
-    if room_config_option == "Multiple tipologie":
+    if room_config_option == "Tipologie multiple":
         weighted_adr = 0
         total_rooms = sum(room_type["numero"] for room_type in room_types)
         
@@ -2203,7 +2230,7 @@ with col2:
     try:
         date_nights = (group_departure - group_arrival).days
         
-        if room_config_option == "Multiple tipologie":
+        if room_config_option == "Tipologie multiple":
             total_value = sum((room_type["numero"] * (adr_lordo + room_type["adr_addon"]) * date_nights) 
                               for room_type in room_types) + total_ancillary
         else:
@@ -2340,9 +2367,9 @@ else:
             with col2:
                 st.info(f"""
                 **Dettagli Economici**
-                - ADR lordo: €{adr_lordo:.2f}{" (base)" if room_config_option == "Multiple tipologie" else ""}
-                - ADR netto: €{adr_netto:.2f}{" (base)" if room_config_option == "Multiple tipologie" else ""}
-                {f"- ADR medio: €{weighted_adr:.2f}" if room_config_option == "Multiple tipologie" else ""}
+                - ADR lordo: €{adr_lordo:.2f}{" (base)" if room_config_option == "Tipologie multiple" else ""}
+                - ADR netto: €{adr_netto:.2f}{" (base)" if room_config_option == "Tipologie multiple" else ""}
+                {f"- ADR medio: €{weighted_adr:.2f}" if room_config_option == "Tipologie multiple" else ""}
                 - Revenue ancillare: €{total_ancillary:.2f}
                 - Valore totale: €{total_value:.2f}
                 """)
@@ -2418,7 +2445,7 @@ else:
                     meeting_revenue=meeting_revenue,
                     other_revenue=other_revenue
                 )
-            elif room_config_option == "Multiple tipologie":
+            elif room_config_option == "Tipologie multiple":
                 room_types_list = edited_types.to_dict('records') if isinstance(edited_types, pd.DataFrame) else room_types
                 
                 analyzer.set_group_request_with_types(
@@ -2493,7 +2520,7 @@ else:
                             meeting_revenue=meeting_revenue,
                             other_revenue=other_revenue
                         )
-                    elif room_config_option == "Multiple tipologie":
+                    elif room_config_option == "Tipologie multiple":
                         scaled_room_types = []
                         for rt in room_types_list:
                             scaled_rt = rt.copy()
@@ -2556,7 +2583,7 @@ else:
                             meeting_revenue=meeting_revenue,
                             other_revenue=other_revenue
                         )
-                    elif room_config_option == "Multiple tipologie":
+                    elif room_config_option == "Tipologie multiple":
                         factor = avg_adr_cy_ly / adr_netto
                         scaled_room_types = []
                         for rt in room_types_list:
@@ -2620,7 +2647,7 @@ else:
                             meeting_revenue=meeting_revenue,
                             other_revenue=other_revenue
                         )
-                    elif room_config_option == "Multiple tipologie":
+                    elif room_config_option == "Tipologie multiple":
                         factor = future_adr / adr_netto
                         scaled_room_types = []
                         for rt in room_types_list:
@@ -3062,7 +3089,7 @@ st.markdown("---")
 st.markdown(
    f"""
    <div style='text-align: center; font-family: Inter, sans-serif; color: #5E5E5E; font-size: 0.8rem;'>
-       <p>Hotel Group Displacement Analyzer | v0.9.5r7 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
+       <p>Hotel Group Displacement Analyzer | v0.9.5r8 developed by Alessandro Merella | Original excel concept and formulas by Andrea Conte<br>
        Sessione: {st.session_state['username']} | Ultimo accesso: {datetime.fromtimestamp(st.session_state['login_time']).strftime('%d/%m/%Y %H:%M')}<br>
        Distributed under MIT License
        </p>
